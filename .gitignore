@@ -1,0 +1,20 @@
+## .NET and Build artifacts
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+
+## Visual Studio
+.vs/
+*.csproj.user
+
+## Libraries (don't commit game DLLs)
+lib/
+
+## OS files
+.DS_Store
+Thumbs.db

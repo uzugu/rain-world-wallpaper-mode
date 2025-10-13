@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <Platforms>win-x86;win-x64</Platforms>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+</Project>
