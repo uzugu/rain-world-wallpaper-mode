@@ -40,6 +40,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="external\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="assets\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

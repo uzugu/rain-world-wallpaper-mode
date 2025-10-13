@@ -1,240 +1,51 @@
 # Rain World Wallpaper Mode - V2.0 Progress
 
-## What We've Built So Far
+## Current Build Snapshot
+- `WallpaperMod.cs` owns plugin lifecycle, Rain World hook registration, and menu launch.
+- `WallpaperController.cs` manages spectator setup, smooth camera transitions, and a configurable five-minute dwell per region.
+- `RegionManager.cs` shuffles all vanilla + Downpour regions, tracks visits, and supports manual forward/back cycling.
+- `WallpaperHUD.cs` surfaces region, area, next room, next region, and region timer; it fades after three seconds and pops back in when any input is detected.
+- `MenuIntegration.cs` injects the "Wallpaper Mode" button directly into the main menu.
+- `WallpaperSettingsOverlay.cs` provides an in-game configuration panel (F1) for quick tweaks.
 
-### ✅ Core Architecture (Complete)
+### Fresh Additions
+- HUD visibility is now driven by keyboard/mouse/controller input instead of mouse motion alone.
+- Manual overrides: Right Arrow/Dpad Right (or  `D`) now jump to the next room, `N` remains as an alternative, `G` advances to the next region, and `B` returns to the previous region. 
+- Time-based region cycling (default five minutes) replaces the old room-count system and can be adjusted in-game with  `+/-` or `PageUp/PageDown`; the HUD reflects the timer in real time. 
+- New F1/Tab overlay lets you adjust dwell duration with Left/Right (Shift for +/- 5 min) and toggle the HUD's always-on mode without leaving the game.
+- Rain Meadow sources remain checked out for reference, but the build now excludes `external/` so downstream dependencies (Steamworks, Rewired, etc.) are no longer required.
 
-**1. WallpaperProcess.cs**
-- Custom ProcessManager.Process for standalone mode
-- Handles fade in/out transitions (0.45s standard)
-- ESC key exits to main menu
-- Manages game initialization and cleanup
-- Integrates with RegionManager and WallpaperHUD
+## What Still Needs Attention
 
-**2. RegionManager.cs**
-- Tracks all 20 Rain World regions (vanilla + Downpour)
-- Shuffles regions for random exploration
-- Switches regions after 20 rooms
-- Maintains exploration progress
-- Queues next regions automatically
+### High Priority
+- Persistable configuration via Remix OptionInterface (region duration, transition timing, HUD fade delay, color themes).
+- HUD customization toggles (always-on mode, hide control hints, alternate colour/font).
+- Broader input detection for gamepads/Steam Deck so the HUD wakes on button presses.
+- Save/load of preferred dwell duration and HUD options between sessions.
 
-**3. WallpaperHUD.cs**
-- Auto-hiding HUD with 3-second fade delay
-- Mouse movement detection to show/hide
-- Displays:
-  - Current location (region + room)
-  - Next location (configurable)
-  - Previous location (configurable)
-  - Region progress (X/20 regions, Y/20 rooms)
-- Smooth alpha fade animations (0.5s)
-- Configurable options ready for Remix menu
+### Medium Priority
+- Additional camera behaviours (preset fly-throughs, slow pan paths, creature-follow).
+- Optional on-screen region picker for manual jumps beyond next/previous.
+- Enhanced fades or loading states during region reload to mask hitching.
 
-### 📋 What's Ready
+### Low Priority / Stretch
+- Music or ambience blending per region.
+- Creature spotlight / postcard framing modes.
+- Timed screenshot capture or export automation.
 
-#### Features Implemented:
-✅ Process system foundation
-✅ All regions defined and ready
-✅ Auto-hiding HUD with mouse detection
-✅ Fade in/out animations
-✅ ESC to exit
-✅ Region shuffling and queueing
-✅ Progress tracking
-✅ Configurable HUD options (structure ready)
+## Testing & Validation
+- `dotnet build` succeeds with the current codebase.
+- Manual playtests confirm: HUD fades after idle, reappears on any key/button, and override keys respond instantly.
+- Long-run soak needed to verify the five-minute timers continue to trigger reloads without memory creep.
 
-#### Code Quality:
-✅ Well-commented
-✅ Modular design
-✅ Error logging
-✅ Clean architecture
-✅ Easy to extend
+## Open Questions
+- Is a full region selection UI required, or are next/prev shortcuts sufficient for V2?
+- Preferred persistence surface: BepInEx config, Remix sliders, or both?
+- Should we expose keybinding remaps before release, or document defaults only?
 
-## What's Still TODO
+## Status
+**Version**: 2.0-alpha (interactive)
 
-### 🔧 Integration Tasks
+**State**: Playable with manual overrides and time-based region cycling
 
-**1. Connect to Existing Room System**
-- Merge with current WallpaperMod.cs room transition code
-- Hook WallpaperProcess into the smooth camera transitions
-- Connect room selection to RegionManager
-- Link room explored events
-
-**2. Menu Integration**
-- Research MainMenu SimpleButton API
-- Add "Wallpaper Mode" button to main menu
-- Hook button click to launch WallpaperProcess
-- Alternative: Add to Collections menu
-
-**3. Game Initialization**
-- Initialize RainWorldGame without player
-- Set up overseer-style camera
-- Load region properly
-- Handle world creation
-
-**4. Configuration System**
-- Create WallpaperConfig.cs (OptionInterface)
-- Add to Remix menu
-- Implement options:
-  - Stay duration slider
-  - Transition duration slider
-  - Rooms per region slider
-  - Show next/previous toggles
-  - Always show HUD toggle
-  - HUD fade delay slider
-  - HUD color picker
-
-### 📐 Technical Challenges
-
-**Challenge 1: ProcessManager.ProcessID**
-- Current code uses `ProcessID.Game`
-- May need custom ProcessID enum extension
-- Or reuse existing IDs creatively
-
-**Challenge 2: Menu Button API**
-- Need to examine Menu.SimpleButton class
-- Understand MenuScene button positioning
-- Hook click events properly
-
-**Challenge 3: Game Without Player**
-- Need to init RainWorldGame without slugcat
-- Similar to Safari mode but automated
-- May need to hook Player initialization
-
-**Challenge 4: Cross-Region Transitions**
-- World unload/reload between regions
-- Handle fade during reload
-- Maintain camera continuity
-
-## Current File Structure
-
-```
-RainWorldWallpaperMod/
-├── WallpaperMod.cs           # Original plugin (V1.0)
-├── WallpaperProcess.cs       # NEW: Custom process
-├── RegionManager.cs          # NEW: Region handling
-├── WallpaperHUD.cs           # NEW: HUD system
-├── RainWorldWallpaperMod.csproj
-├── assets/
-│   └── modinfo.json
-└── lib/
-    ├── UnityEngine.dll
-    ├── UnityEngine.CoreModule.dll
-    ├── UnityEngine.InputLegacyModule.dll
-    ├── Assembly-CSharp.dll
-    └── HOOKS-Assembly-CSharp.dll
-```
-
-## Next Steps (Priority Order)
-
-### Step 1: Merge with Existing Code
-**Goal**: Connect new architecture to working room transitions
-
-**Tasks**:
-1. Update WallpaperMod.cs to use WallpaperProcess
-2. Move room transition logic into WallpaperProcess
-3. Connect RegionManager.OnRoomExplored() calls
-4. Test basic functionality
-
-**Why First**: This gets us a functional system quickly
-
-### Step 2: Test Without Menu
-**Goal**: Make it work via F9 toggle with new architecture
-
-**Tasks**:
-1. Temporary F9 to launch WallpaperProcess
-2. Verify all new features work
-3. Test HUD fade and mouse detection
-4. Fix any bugs
-
-**Why Second**: Validate architecture before menu work
-
-### Step 3: Add Menu Integration
-**Goal**: Professional menu button
-
-**Tasks**:
-1. Research Menu.SimpleButton
-2. Hook MainMenu constructor
-3. Add "Wallpaper Mode" button
-4. Wire up to WallpaperProcess
-
-**Why Third**: Polish after core works
-
-### Step 4: Configuration
-**Goal**: User customization
-
-**Tasks**:
-1. Create WallpaperConfig.cs
-2. Add OptionInterface
-3. Wire up to Remix
-4. Test all options
-
-**Why Last**: Core features first, then customization
-
-## Testing Strategy
-
-### Phase 1: Unit Testing
-- Test RegionManager shuffling
-- Test HUD fade logic
-- Test mouse detection
-
-### Phase 2: Integration Testing
-- Test process switching
-- Test region transitions
-- Test HUD with real game
-
-### Phase 3: User Testing
-- Long-duration runs
-- All regions coverage
-- Performance monitoring
-- Bug hunting
-
-## Timeline Estimate
-
-**Week 1**: Integration + Testing (Steps 1-2)
-- Merge code
-- Get it working end-to-end
-- Fix bugs
-
-**Week 2**: Menu Integration (Step 3)
-- Research menu API
-- Add button
-- Test menu flow
-
-**Week 3**: Configuration (Step 4)
-- Build Remix interface
-- Test options
-- Polish
-
-**Week 4**: Polish + Release
-- Bug fixes
-- Documentation
-- Release V2.0
-
-## Success Metrics
-
-✅ Can launch from main menu with one click
-✅ Explores all 20 regions automatically
-✅ HUD shows/hides on mouse movement
-✅ Smooth transitions between rooms and regions
-✅ Configurable via Remix
-✅ No crashes during extended runs
-✅ 60 FPS maintained
-✅ Professional user experience
-
-## Current Status
-
-**Version**: 2.0-alpha (Foundation)
-**Phase**: Architecture Complete, Integration Pending
-**Working**: Core classes built and ready
-**Not Working**: Not yet connected to game
-**Next Milestone**: Functional prototype via F9 toggle
-
----
-
-**Files Created**:
-- WallpaperProcess.cs (180 lines)
-- RegionManager.cs (150 lines)
-- WallpaperHUD.cs (230 lines)
-
-**Total New Code**: ~560 lines
-
-**Ready for**: Integration testing
+**Next Milestone**: Add Remix options for dwell timers, HUD behaviour, and control remapping

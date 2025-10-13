@@ -12,13 +12,12 @@ namespace RainWorldWallpaperMod
     {
         private WallpaperController controller;
         private readonly string initialRegion;
-        private List<string> allRegions;
-        private Queue<string> regionQueue;
+        private List<string> regionOrder;
+        private HashSet<string> visitedRegions;
         private string currentRegion;
         private int roomsExploredInRegion = 0;
 
-        // Configuration
-        private int roomsPerRegion = 20;
+        private int currentRegionIndex = 0;
 
         // All Rain World regions (vanilla + Downpour)
         private static readonly string[] VANILLA_REGIONS = new string[]
@@ -53,61 +52,80 @@ namespace RainWorldWallpaperMod
         {
             this.controller = controller;
             initialRegion = string.IsNullOrEmpty(startRegion) ? "SU" : startRegion;
-            currentRegion = initialRegion;
+            currentRegion = initialRegion.ToUpperInvariant();
+            visitedRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             roomsExploredInRegion = 0;
             InitializeRegions();
         }
 
         private void InitializeRegions()
         {
-            allRegions = new List<string>();
-            allRegions.AddRange(VANILLA_REGIONS);
-            allRegions.AddRange(DOWNPOUR_REGIONS);
+            var distinctRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var region in VANILLA_REGIONS)
+            {
+                distinctRegions.Add(region);
+            }
+            foreach (var region in DOWNPOUR_REGIONS)
+            {
+                distinctRegions.Add(region);
+            }
 
-            // Remove duplicates and ensure start region is tracked
-            allRegions = allRegions.Distinct().ToList();
+            regionOrder = distinctRegions.ToList();
 
-            // Prepare queue without the current region
-            var available = allRegions.Where(r => !string.Equals(r, currentRegion, StringComparison.OrdinalIgnoreCase)).ToList();
-            ShuffleRegions(available);
-            regionQueue = new Queue<string>(available);
-        }
+            // Shuffle region order for varied traversal
+            for (int i = regionOrder.Count - 1; i > 0; i--)
+            {
+                int swapIndex = UnityEngine.Random.Range(0, i + 1);
+                (regionOrder[i], regionOrder[swapIndex]) = (regionOrder[swapIndex], regionOrder[i]);
+            }
 
-        private void ShuffleRegions(List<string> regions = null)
-        {
-            var source = regions ?? allRegions;
-            var shuffled = source.OrderBy(x => UnityEngine.Random.value).ToList();
-            regionQueue = new Queue<string>(shuffled);
+            if (!regionOrder.Any(r => string.Equals(r, currentRegion, StringComparison.OrdinalIgnoreCase)))
+            {
+                regionOrder.Insert(0, currentRegion);
+            }
+
+            currentRegionIndex = regionOrder.FindIndex(r => string.Equals(r, currentRegion, StringComparison.OrdinalIgnoreCase));
+            if (currentRegionIndex < 0)
+            {
+                currentRegionIndex = 0;
+                currentRegion = regionOrder[currentRegionIndex];
+            }
+
+            visitedRegions.Clear();
+            visitedRegions.Add(currentRegion);
         }
 
         public void OnRoomExplored()
         {
             roomsExploredInRegion++;
-            WallpaperMod.Log?.LogInfo($"RegionManager: Room {roomsExploredInRegion}/{roomsPerRegion} in {currentRegion}");
-
-            if (roomsExploredInRegion >= roomsPerRegion)
-            {
-                SwitchToNextRegion();
-            }
-        }
-
-        private void SwitchToNextRegion()
-        {
-            WallpaperMod.Log?.LogInfo($"RegionManager: Switching from {currentRegion}");
-
-            // Get next region
-            if (regionQueue.Count == 0)
-            {
-                // Reshuffle when all regions explored
-                ShuffleRegions();
-            }
-
-            AssignNextRegion();
+            WallpaperMod.Log?.LogInfo($"RegionManager: Room {roomsExploredInRegion} explored in {currentRegion}");
         }
 
         public string GetCurrentRegion()
         {
             return currentRegion;
+        }
+
+        public string GetNextRegion()
+        {
+            if (regionOrder == null || regionOrder.Count == 0)
+            {
+                return currentRegion;
+            }
+
+            var nextIndex = (currentRegionIndex + 1) % regionOrder.Count;
+            return regionOrder[nextIndex];
+        }
+
+        public string GetPreviousRegion()
+        {
+            if (regionOrder == null || regionOrder.Count == 0)
+            {
+                return currentRegion;
+            }
+
+            var prevIndex = (currentRegionIndex - 1 + regionOrder.Count) % regionOrder.Count;
+            return regionOrder[prevIndex];
         }
 
         public int GetRoomsExplored()
@@ -117,41 +135,77 @@ namespace RainWorldWallpaperMod
 
         public int GetTotalRegions()
         {
-            return allRegions.Count;
+            return regionOrder?.Count ?? 0;
         }
 
         public int GetRegionsExplored()
         {
-            return allRegions.Count - regionQueue.Count;
+            return visitedRegions?.Count ?? 0;
         }
-
-        public int RoomsPerRegion => roomsPerRegion;
 
         public void Cleanup()
         {
             // Cleanup if needed
         }
 
-        private void AssignNextRegion()
+        public void AdvanceToNextRegion()
         {
-            if (regionQueue.Count == 0)
+            if (regionOrder == null || regionOrder.Count == 0)
             {
-                var refill = allRegions.Where(r => !string.Equals(r, currentRegion, StringComparison.OrdinalIgnoreCase)).ToList();
-                ShuffleRegions(refill);
+                return;
             }
 
-            if (regionQueue.Count > 0)
-            {
-                currentRegion = regionQueue.Dequeue();
-                roomsExploredInRegion = 0;
+            currentRegionIndex = (currentRegionIndex + 1) % regionOrder.Count;
+            SetCurrentRegion(regionOrder[currentRegionIndex]);
+        }
 
-                WallpaperMod.Log?.LogInfo($"RegionManager: Now exploring region {currentRegion}");
-                controller.OnRegionChanged(currentRegion);
-            }
-            else
+        public void AdvanceToPreviousRegion()
+        {
+            if (regionOrder == null || regionOrder.Count == 0)
             {
-                WallpaperMod.Log?.LogWarning("RegionManager: No regions available to assign");
+                return;
             }
+
+            currentRegionIndex = (currentRegionIndex - 1 + regionOrder.Count) % regionOrder.Count;
+            SetCurrentRegion(regionOrder[currentRegionIndex]);
+        }
+
+        public void ForceRegion(string regionCode)
+        {
+            if (string.IsNullOrEmpty(regionCode))
+            {
+                return;
+            }
+
+            if (regionOrder == null)
+            {
+                InitializeRegions();
+            }
+
+            var index = regionOrder.FindIndex(r => string.Equals(r, regionCode, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                regionOrder.Add(regionCode.ToUpperInvariant());
+                index = regionOrder.Count - 1;
+            }
+
+            currentRegionIndex = index;
+            SetCurrentRegion(regionOrder[currentRegionIndex]);
+        }
+
+        public IReadOnlyList<string> GetAllRegions()
+        {
+            return regionOrder;
+        }
+
+        private void SetCurrentRegion(string regionCode)
+        {
+            currentRegion = regionCode.ToUpperInvariant();
+            roomsExploredInRegion = 0;
+            visitedRegions.Add(currentRegion);
+
+            WallpaperMod.Log?.LogInfo($"RegionManager: Now exploring region {currentRegion}");
+            controller.OnRegionChanged(currentRegion);
         }
     }
 }

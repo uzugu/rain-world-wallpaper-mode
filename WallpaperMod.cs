@@ -1,5 +1,6 @@
 using BepInEx;
 using BepInEx.Logging;
+using Menu.Remix.MixedUI;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -7,10 +8,11 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.vrmakes.wallpapermod", "Rain World Wallpaper Mode", "2.0.0")]
+    [BepInPlugin("com.vrmakes.wallpapermod", "Rain World Wallpaper Mode", "1.0.2")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
+        public static WallpaperModOptions Options;
 
         private bool pendingWallpaperLaunch;
         private WallpaperController activeController;
@@ -48,7 +50,8 @@ namespace RainWorldWallpaperMod
             Log = Logger;
             Log?.LogInfo("Rain World Wallpaper Mod V2.0 loaded!");
 
-            MenuIntegration.Initialize();
+            // Don't initialize options here - wait for OnModsInit
+            // Options will be created by Remix when needed
 
             On.RainWorld.OnModsInit += RainWorld_OnModsInit;
             On.ProcessManager.RequestMainProcessSwitch_ProcessID += ProcessManager_RequestMainProcessSwitch;
@@ -57,6 +60,18 @@ namespace RainWorldWallpaperMod
             On.RainWorldGame.ShutDownProcess += RainWorldGame_ShutDownProcess;
             On.RoomCamera.Update += RoomCamera_Update;
             On.Player.Update += Player_Update;
+
+            MenuIntegration.Initialize();
+        }
+
+        // Remix integration - this method is called by the Remix framework
+        public static OptionInterface LoadOI()
+        {
+            if (Options == null)
+            {
+                Options = new WallpaperModOptions();
+            }
+            return Options;
         }
 
         public void BeginWallpaperMode(ProcessManager manager)
@@ -85,6 +100,25 @@ namespace RainWorldWallpaperMod
         private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
             orig(self);
+
+            // Initialize and register Remix options
+            try
+            {
+                // Create options if not already created by LoadOI
+                if (Options == null)
+                {
+                    Options = new WallpaperModOptions();
+                }
+
+                // Register with Remix using underscore format for mod ID
+                MachineConnector.SetRegisteredOI("vrmakes_wallpapermod", Options);
+                Log?.LogInfo("Wallpaper Mod: Remix options registered with ID 'vrmakes_wallpapermod'");
+            }
+            catch (Exception ex)
+            {
+                Log?.LogError($"Failed to initialize and register Remix options: {ex}");
+            }
+
             Log?.LogInfo("Wallpaper Mod initialized with game");
         }
 
@@ -260,6 +294,11 @@ namespace RainWorldWallpaperMod
 
         private string ResolveInitialRegion()
         {
+            // Try to use the config value first
+            if (Options != null && !string.IsNullOrEmpty(Options.StartRegion.Value))
+            {
+                return Options.StartRegion.Value.ToUpperInvariant();
+            }
             return requestedStartRegion ?? "SU";
         }
     }

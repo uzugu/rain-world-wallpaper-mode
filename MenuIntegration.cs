@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using Menu;
 
@@ -38,7 +40,7 @@ namespace RainWorldWallpaperMod
             }
             catch (Exception ex)
             {
-            WallpaperMod.Log?.LogError($"MenuIntegration: Failed to add button - {ex}");
+                WallpaperMod.Log?.LogError($"MenuIntegration: Failed to add button - {ex}");
             }
         }
 
@@ -46,19 +48,32 @@ namespace RainWorldWallpaperMod
         {
             WallpaperMod.Log?.LogInfo("MenuIntegration: Adding Wallpaper Mode button");
 
-            Vector2 buttonPosition = new Vector2(200f, 180f);
-            Vector2 buttonSize = new Vector2(200f, 40f);
+            Vector2 buttonSize = new Vector2(200f, 30f);
 
-            wallpaperButton = new WallpaperMenuButton(
+            wallpaperButton = new Menu.SimpleButton(
                 menu,
                 menu.pages[0],
                 menu.Translate("WALLPAPER MODE"),
-                buttonPosition,
-                buttonSize,
-                () => OnWallpaperButtonClicked(menu)
+                "WALLPAPER_MODE",
+                Vector2.zero,
+                buttonSize
             );
 
-            menu.pages[0].subObjects.Add(wallpaperButton);
+            int insertIndex = -1;
+            try
+            {
+                FieldInfo field = typeof(MainMenu).GetField("mainMenuButtons", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field?.GetValue(menu) is List<Menu.SimpleButton> buttonList && buttonList.Count > 0)
+                {
+                    insertIndex = Mathf.Clamp(buttonList.Count - 1, 0, buttonList.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogWarning($"MenuIntegration: Unable to access mainMenuButtons via reflection - {ex.Message}");
+            }
+
+            menu.AddMainMenuButton(wallpaperButton, () => OnWallpaperButtonClicked(menu), insertIndex);
 
             WallpaperMod.Log?.LogInfo("MenuIntegration: Button added successfully");
         }
@@ -92,21 +107,5 @@ namespace RainWorldWallpaperMod
             initialized = false;
         }
 
-        private class WallpaperMenuButton : Menu.SimpleButton
-        {
-            private readonly Action onClick;
-
-            public WallpaperMenuButton(MainMenu menu, Menu.Page owner, string label, Vector2 position, Vector2 size, Action onClick)
-                : base(menu, owner, label, "WALLPAPER_MODE", position, size)
-            {
-                this.onClick = onClick;
-            }
-
-            public override void Clicked()
-            {
-                base.Clicked();
-                onClick?.Invoke();
-            }
-        }
     }
 }

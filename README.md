@@ -4,17 +4,19 @@ A Rain World mod that transforms the game into a dynamic wallpaper with smooth t
 
 ## Features
 
-- **Automatic Room Transitions**: Smoothly moves through different rooms and regions
-- **Smooth Easing**: Uses cubic easing for pleasant camera transitions
-- **Random Exploration**: Randomly selects locations to create an ever-changing view
-- **Safari Mode Inspired**: Based on Rain World's Safari mode but automated for wallpaper use
+- **Single‑Click Launch**: Adds a “Wallpaper Mode” button to Rain World’s main menu.
+- **Hands‑Free Exploration**: Automatically tours rooms with smooth eased camera transitions and time-based region cycling.
+- **Smart Region Manager**: Stays in a region for a configurable duration, then reloads into fresh territory.
+- **Overlay & HUD**: F1/Tab opens an in-game settings overlay; HUD shows current room/region, next stop, timers, and control hints.
+- **Manual Overrides**: Right Arrow/D-pad Right or `N` jump to the next room, `G`/`B` cycle regions, `H` toggles HUD visibility, +/- or PgUp/PgDn adjust dwell time.
+- **Remix Preparation**: A Remix tab is included for future configuration (UI present; persistence WIP).
 
 ## Installation
 
 1. Ensure you have Rain World v1.9+ (Downpour) installed
 2. Install BepInEx if not already installed
-3. Copy the mod folder to `RainWorld_Data/StreamingAssets/mods/`
-4. Enable the mod in the Remix menu
+3. Copy the entire `mod` folder from `artifacts/bin/RainWorldWallpaperMod/Debug_AnyCPU/mod/` to `RainWorld_Data/StreamingAssets/mods/vrmakes.wallpapermod/`
+4. Launch Rain World, open the Remix menu, enable “Rain World Wallpaper Mode”, and apply changes (a restart is required)
 
 ## Development
 
@@ -42,21 +44,20 @@ Before building, you need to copy the following DLLs from your Rain World instal
 
 ## Configuration
 
-Currently configuration is done through code. Future versions will include:
+Two configuration surfaces are available:
 
-- Transition duration adjustment
-- Stay duration per location
-- Region selection
-- Camera behavior options
+1. **In-game overlay** (`F1` / `Tab`) — adjust region dwell duration, toggle HUD always-on mode, and review controls without leaving the wallpaper session.
+2. **Remix tab** — current build exposes sliders/toggles for future persistence work. Values are displayed but do not yet survive restarts; overlay settings take priority during play.
 
-## TODO
+If you change dwell duration via keyboard controls or overlay, the HUD instantly reflects the new value.
 
-- [ ] Implement room selection logic
-- [ ] Add camera positioning system
-- [ ] Implement region traversal
-- [ ] Add configuration options
-- [ ] Test with different regions
-- [ ] Add support for custom region packs
+## Roadmap / TODO
+
+- [ ] Persist Remix configuration to disk and load on boot
+- [ ] Extend Remix UI with controller-friendly presets
+- [ ] Add optional fade overlays during region reloads
+- [ ] Expose camera path variants (pan/orbit/creature follow)
+- [ ] Provide hooks for custom region packs / community playlists
 
 ## License
 

@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using RWCustom;
 
 namespace RainWorldWallpaperMod
 {
@@ -16,13 +15,12 @@ namespace RainWorldWallpaperMod
 
         // HUD Elements
         private FContainer hudContainer;
-        private FLabel currentLocationLabel;
-        private FLabel nextLocationLabel;
-        private FLabel previousLocationLabel;
-        private FLabel regionProgressLabel;
-
-        // Mouse tracking
-        private Vector2 lastMousePosition;
+        private FLabel currentRegionLabel;
+        private FLabel currentRoomLabel;
+        private FLabel nextRoomLabel;
+        private FLabel nextRegionLabel;
+        private FLabel regionTimeLabel;
+        private FLabel controlHintLabel;
         private float idleTimer = 0f;
         private float fadeDelay = 3f; // Fade after 3 seconds
 
@@ -31,53 +29,82 @@ namespace RainWorldWallpaperMod
         private float targetAlpha = 1f;
         private bool isVisible = true;
 
-        // Configuration (will be loaded from config later)
-        private bool showNextLocation = true;
-        private bool showPreviousLocation = false;
-        private bool alwaysShowHUD = false;
+        // Configuration (will be loaded from config)
+        private bool alwaysShowHUD = true;
 
         public bool IsReady { get; private set; }
+        public bool AlwaysShowHUD => alwaysShowHUD;
 
         public WallpaperHUD(RoomCamera camera, WallpaperController controller)
         {
             this.camera = camera;
             this.controller = controller;
 
+            // Load settings from config
+            if (WallpaperMod.Options != null)
+            {
+                fadeDelay = WallpaperMod.Options.HudFadeDelay.Value;
+                alwaysShowHUD = WallpaperMod.Options.AlwaysShowHud.Value;
+            }
+
             InitializeHUD();
-            lastMousePosition = UnityEngine.Input.mousePosition;
         }
 
         private void InitializeHUD()
         {
-            if (camera.hud == null || camera.hud.fContainers == null || camera.hud.fContainers.Length == 0)
+            try
             {
-                WallpaperMod.Log?.LogWarning("WallpaperHUD: Cannot initialize, no HUD container");
-                IsReady = false;
-                return;
+                // Create main container and add directly to Futile's stage
+                // This works even without a camera HUD, like Rain Meadow does
+                hudContainer = new FContainer();
+                Futile.stage.AddChild(hudContainer);
+
+                // Create labels
+                currentRegionLabel = CreateLabel(100f, 720f, "");
+                currentRoomLabel = CreateLabel(100f, 690f, "");
+                nextRoomLabel = CreateLabel(100f, 660f, "");
+                nextRegionLabel = CreateLabel(100f, 630f, "");
+                regionTimeLabel = CreateLabel(100f, 600f, "");
+                controlHintLabel = CreateLabel(100f, 560f, "");
+
+                regionTimeLabel.color = new Color(0f, 0.7f, 1f, 1f);
+                controlHintLabel.color = new Color(0.7f, 0.85f, 1f, 0.8f);
+                controlHintLabel.scale = 0.9f;
+
+                hudContainer.AddChild(currentRegionLabel);
+                hudContainer.AddChild(currentRoomLabel);
+                hudContainer.AddChild(nextRoomLabel);
+                hudContainer.AddChild(nextRegionLabel);
+                hudContainer.AddChild(regionTimeLabel);
+                hudContainer.AddChild(controlHintLabel);
+
+                WallpaperMod.Log?.LogInfo("WallpaperHUD: Initialized successfully");
+                IsReady = true;
             }
-
-            // Create main container
-            hudContainer = new FContainer();
-            camera.hud.fContainers[0].AddChild(hudContainer);
-
-            // Create labels
-            currentLocationLabel = CreateLabel(100f, 700f, "");
-            nextLocationLabel = CreateLabel(100f, 670f, "");
-            previousLocationLabel = CreateLabel(100f, 640f, "");
-            regionProgressLabel = CreateLabel(100f, 610f, "");
-
-            hudContainer.AddChild(currentLocationLabel);
-            if (showNextLocation) hudContainer.AddChild(nextLocationLabel);
-            if (showPreviousLocation) hudContainer.AddChild(previousLocationLabel);
-            hudContainer.AddChild(regionProgressLabel);
-
-            WallpaperMod.Log?.LogInfo("WallpaperHUD: Initialized");
-            IsReady = true;
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogError($"WallpaperHUD: Failed to initialize - {ex}");
+                IsReady = false;
+            }
         }
 
         private FLabel CreateLabel(float x, float y, string text)
         {
-            return new FLabel("font", text)
+            // Try to use the display font, fallback to font if not available
+            string fontName = "DisplayFont";
+            try
+            {
+                if (Futile.atlasManager.GetAtlasWithName("font") != null)
+                {
+                    fontName = "font";
+                }
+            }
+            catch
+            {
+                // If font check fails, use DisplayFont
+            }
+
+            return new FLabel(fontName, text)
             {
                 x = x,
                 y = y,
@@ -88,57 +115,90 @@ namespace RainWorldWallpaperMod
 
         public void Update()
         {
-            if (currentLocationLabel == null)
+            if (currentRegionLabel == null)
             {
                 return;
             }
 
-            // Check mouse movement
-            Vector2 currentMousePos = UnityEngine.Input.mousePosition;
-
-            if (Vector2.Distance(currentMousePos, lastMousePosition) > 1f)
+            if (alwaysShowHUD)
             {
-                // Mouse moved - show HUD
-                OnMouseMoved();
-                lastMousePosition = currentMousePos;
+                targetAlpha = 1f;
+                isVisible = true;
+                if (!Mathf.Approximately(currentAlpha, 1f))
+                {
+                    currentAlpha = 1f;
+                    UpdateAlpha();
+                }
             }
-
-            // Update idle timer
-            if (!alwaysShowHUD && isVisible)
+            else if (isVisible)
             {
                 idleTimer += Time.deltaTime;
 
                 if (idleTimer >= fadeDelay)
                 {
-                    // Start fade out
                     targetAlpha = 0f;
                     isVisible = false;
                 }
             }
 
-            // Animate alpha
-            if (currentAlpha != targetAlpha)
+            if (!Mathf.Approximately(currentAlpha, targetAlpha))
             {
                 float fadeSpeed = 2f; // Fade over 0.5 seconds
                 currentAlpha = Mathf.MoveTowards(currentAlpha, targetAlpha, fadeSpeed * Time.deltaTime);
                 UpdateAlpha();
             }
+            else if (alwaysShowHUD && !Mathf.Approximately(currentAlpha, 1f))
+            {
+                currentAlpha = 1f;
+                targetAlpha = 1f;
+                UpdateAlpha();
+            }
 
-            // Update text
             UpdateLabels();
         }
 
-        private void OnMouseMoved()
+        public void RegisterUserActivity()
         {
-            if (!alwaysShowHUD && !isVisible)
+            idleTimer = 0f;
+
+            if (alwaysShowHUD)
             {
-                // Fade back in
+                return;
+            }
+
+            targetAlpha = 1f;
+            isVisible = true;
+            if (currentAlpha < 1f)
+            {
+                currentAlpha = 1f;
+                UpdateAlpha();
+            }
+        }
+
+        public void SetAlwaysShowHUD(bool value)
+        {
+            alwaysShowHUD = value;
+
+            // Save to config
+            if (WallpaperMod.Options != null)
+            {
+                WallpaperMod.Options.AlwaysShowHud.Value = value;
+            }
+
+            if (alwaysShowHUD)
+            {
+                targetAlpha = 1f;
+                currentAlpha = 1f;
+                isVisible = true;
+                idleTimer = 0f;
+                UpdateAlpha();
+            }
+            else
+            {
+                idleTimer = 0f;
                 targetAlpha = 1f;
                 isVisible = true;
             }
-
-            // Reset idle timer
-            idleTimer = 0f;
         }
 
         private void UpdateAlpha()
@@ -151,41 +211,39 @@ namespace RainWorldWallpaperMod
 
         private void UpdateLabels()
         {
-            if (controller.RegionManager == null || currentLocationLabel == null)
+            if (controller.RegionManager == null || currentRegionLabel == null)
             {
                 return;
             }
 
-            // Current location
-            string currentRegion = controller.CurrentRegionCode;
+            string currentRegionCode = controller.CurrentRegionCode;
+            string nextRegionCode = controller.NextRegionCode;
             string currentRoom = controller.CurrentRoomName;
-            currentLocationLabel.text = $"Current: {GetRegionName(currentRegion)}{FormatRoomName(currentRoom)}";
+            string nextRoom = controller.NextRoomName;
 
-            // Next location (placeholder)
-            if (showNextLocation && nextLocationLabel != null)
+            currentRegionLabel.text = $"Region: {GetRegionName(currentRegionCode)} ({currentRegionCode})";
+            currentRoomLabel.text = string.IsNullOrEmpty(currentRoom)
+                ? "Area: [Loading...]"
+                : $"Area: {currentRoom}";
+
+            nextRoomLabel.text = string.IsNullOrEmpty(nextRoom)
+                ? "Next Room: [Calculating...]"
+                : $"Next Room: {nextRoom}";
+
+            if (!string.IsNullOrEmpty(nextRegionCode) && !string.Equals(nextRegionCode, currentRegionCode, StringComparison.OrdinalIgnoreCase))
             {
-                string nextRoom = controller.NextRoomName;
-                nextLocationLabel.text = string.IsNullOrEmpty(nextRoom)
-                    ? "Next: [Calculating...]"
-                    : $"Next: {nextRoom}";
+                nextRegionLabel.text = $"Next Region: {GetRegionName(nextRegionCode)} ({nextRegionCode})";
+            }
+            else
+            {
+                nextRegionLabel.text = "Next Region: [Pending]";
             }
 
-            // Previous location (placeholder)
-            if (showPreviousLocation && previousLocationLabel != null)
-            {
-                string previousRoom = controller.PreviousRoomName;
-                previousLocationLabel.text = string.IsNullOrEmpty(previousRoom)
-                    ? "Previous: [N/A]"
-                    : $"Previous: {previousRoom}";
-            }
+            float elapsed = Mathf.Clamp(controller.RegionTimerSeconds, 0f, Mathf.Max(controller.RegionDurationSeconds, 0.01f));
+            float total = Mathf.Max(controller.RegionDurationSeconds, 0.01f);
+            regionTimeLabel.text = $"Region Time: {FormatTime(elapsed)} / {FormatTime(total)} | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
 
-            // Region progress
-            int regionsExplored = controller.RegionsExplored;
-            int totalRegions = controller.TotalRegions;
-            int roomsExplored = controller.RoomsExploredInRegion;
-            int roomsTarget = controller.RoomsPerRegion > 0 ? controller.RoomsPerRegion : 20;
-
-            regionProgressLabel.text = $"Region: {regionsExplored}/{totalRegions} | Rooms: {roomsExplored}/{roomsTarget}";
+            controlHintLabel.text = "Controls: Right Arrow/Dpad -> Next | N Next Room | G Next Region | B Prev Region | plus/minus or PgUp/PgDn Duration | F1/Tab Settings";
         }
 
         private string GetRegionName(string regionCode)
@@ -217,14 +275,11 @@ namespace RainWorldWallpaperMod
             }
         }
 
-        private string FormatRoomName(string roomName)
+        private string FormatTime(float seconds)
         {
-            if (string.IsNullOrEmpty(roomName))
-            {
-                return string.Empty;
-            }
-
-            return $" - {roomName}";
+            float clamped = Mathf.Clamp(seconds, 0f, 359999f);
+            var span = TimeSpan.FromSeconds(clamped);
+            return $"{(int)span.TotalMinutes:00}:{span.Seconds:00}";
         }
 
         public void Destroy()

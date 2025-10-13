@@ -14,6 +14,9 @@ artifacts/
 
 ## Libraries (don't commit game DLLs)
 lib/
+external/
+.claude/
+NUL
 
 ## OS files
 .DS_Store
