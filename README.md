@@ -9,7 +9,22 @@ A Rain World mod that transforms the game into a dynamic wallpaper with smooth t
 - **Smart Region Manager**: Stays in a region for a configurable duration, then reloads into fresh territory.
 - **Overlay & HUD**: F1/Tab opens an in-game settings overlay; HUD shows current room/region, next stop, timers, and control hints.
 - **Manual Overrides**: Right Arrow/D-pad Right or `N` jump to the next room, `G`/`B` cycle regions, `H` toggles HUD visibility, +/- or PgUp/PgDn adjust dwell time.
+- **Camera Modes**: Four camera modes control how views are selected in multi-angle rooms (configurable in Remix or in-game overlay).
 - **Remix Preparation**: A Remix tab is included for future configuration (UI present; persistence WIP).
+
+## Camera Modes
+
+The mod supports four camera modes that control how camera positions are selected within rooms:
+
+- **Random Exploration** (default) — When entering a room, randomly picks a starting camera position, then randomly decides how many additional jumps to make (0 to N-1 remaining positions). Each jump goes to a random unvisited position in that room, never repeating. Example: In a 6-position room, might start at position 3, then jump to 5, 1, and 6 before moving to the next room. Provides the most dynamic and varied viewing experience.
+
+- **Single Random** — Picks one random camera position per room and immediately moves to the next room. Quick, unpredictable exploration.
+
+- **All Positions** — Shows all camera positions sequentially (1→2→3→4→5→6). Ensures every angle of a room is seen. Comprehensive but predictable.
+
+- **First Only** — Always uses the first camera position (position 0). Fastest room transitions with consistent framing.
+
+Camera mode can be changed in the Remix menu or via the in-game settings overlay (F1/Tab).
 
 ## Installation
 
