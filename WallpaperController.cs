@@ -214,15 +214,33 @@ namespace RainWorldWallpaperMod
             {
                 bool overlayDirty = false;
 
-                if (Input.GetKeyDown(KeyCode.RightArrow))
+                // Quick travel controls (Up/Down to switch focus, Left/Right to cycle, Enter/G to travel)
+                if (Input.GetKeyDown(KeyCode.UpArrow))
                 {
-                    AdjustRegionDuration(baseStep);
+                    settingsOverlay?.CycleFocus(-1);
+                    overlayDirty = true;
+                }
+                else if (Input.GetKeyDown(KeyCode.DownArrow))
+                {
+                    settingsOverlay?.CycleFocus(1);
+                    overlayDirty = true;
+                }
+                else if (Input.GetKeyDown(KeyCode.RightArrow))
+                {
+                    settingsOverlay?.CycleCurrentSelection(1);
                     overlayDirty = true;
                 }
                 else if (Input.GetKeyDown(KeyCode.LeftArrow))
                 {
-                    AdjustRegionDuration(-baseStep);
+                    settingsOverlay?.CycleCurrentSelection(-1);
                     overlayDirty = true;
+                }
+
+                // Apply travel with Enter or G
+                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.G))
+                {
+                    settingsOverlay?.ApplyTravel();
+                    ToggleSettingsMenu(); // Close overlay after applying
                 }
 
                 if (Input.GetKeyDown(KeyCode.H))
@@ -718,5 +736,26 @@ namespace RainWorldWallpaperMod
         public float RegionDurationSeconds => regionDurationSeconds;
 
         public bool IsTransitioning => isTransitioning;
+
+        public RegionManager RegionMgr => RegionManager;
+
+        /// <summary>
+        /// Request a region change from the overlay
+        /// </summary>
+        public void RequestRegionChange(string regionCode)
+        {
+            if (string.IsNullOrEmpty(regionCode))
+            {
+                return;
+            }
+
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Region change requested to {regionCode}");
+
+            // Update region manager to point to this region
+            RegionManager?.ForceRegion(regionCode);
+
+            // Trigger the change
+            OnRegionChanged(regionCode);
+        }
     }
 }
