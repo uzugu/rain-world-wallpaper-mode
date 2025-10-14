@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.vrmakes.wallpapermod", "Rain World Wallpaper Mode", "1.0.2")]
+    [BepInPlugin("com.vrmakes.wallpapermod", "Rain World Wallpaper Mode", "1.0.4")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
@@ -240,12 +240,15 @@ namespace RainWorldWallpaperMod
             TrySetField(menuSetup, "loadGame", false);
             TrySetField(menuSetup, "fastTravel", false);
             TrySetField(menuSetup, "regionSelectRoom", ResolveStartRoom(regionCode));
-            TrySetField(menuSetup, "playerCharacter", SlugcatStats.Name.White);
+
+            // Use the selected campaign from config
+            var slugcatName = ResolveSlugcatName();
+            TrySetField(menuSetup, "playerCharacter", slugcatName);
 
             rainWorld?.progression?.ClearOutSaveStateFromMemory();
             if (rainWorld?.progression?.miscProgressionData != null)
             {
-                TrySetField(rainWorld.progression.miscProgressionData, "currentlySelectedSinglePlayerSlugcat", SlugcatStats.Name.White);
+                TrySetField(rainWorld.progression.miscProgressionData, "currentlySelectedSinglePlayerSlugcat", slugcatName);
             }
 
         }
@@ -254,15 +257,19 @@ namespace RainWorldWallpaperMod
         {
             if (string.IsNullOrEmpty(regionCode))
             {
+                Log?.LogInfo("ResolveStartRoom: Empty region code, defaulting to SU_A01");
                 return "SU_A01";
             }
 
             if (RegionStartRooms.TryGetValue(regionCode, out var room))
             {
+                Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' -> Room '{room}'");
                 return room;
             }
 
-            return regionCode + "_A01";
+            string defaultRoom = regionCode + "_A01";
+            Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' not in dictionary, using default '{defaultRoom}'");
+            return defaultRoom;
         }
 
         private static void TrySetField(object target, string fieldName, object value)
@@ -295,11 +302,24 @@ namespace RainWorldWallpaperMod
         private string ResolveInitialRegion()
         {
             // Try to use the config value first
-            if (Options != null && !string.IsNullOrEmpty(Options.StartRegion.Value))
+            if (Options != null)
             {
-                return Options.StartRegion.Value.ToUpperInvariant();
+                string regionCode = WallpaperModOptions.GetRegionCode(Options.StartRegion.Value);
+                Log?.LogInfo($"ResolveInitialRegion: Config value = '{Options.StartRegion.Value}', Resolved to '{regionCode}'");
+                return regionCode;
             }
+            Log?.LogInfo($"ResolveInitialRegion: No options, defaulting to '{requestedStartRegion ?? "SU"}'");
             return requestedStartRegion ?? "SU";
+        }
+
+        private SlugcatStats.Name ResolveSlugcatName()
+        {
+            // Use the selected campaign from config, fallback to White/Survivor
+            if (Options != null)
+            {
+                return WallpaperModOptions.GetSlugcatName(Options.SelectedCampaign.Value);
+            }
+            return SlugcatStats.Name.White;
         }
     }
 }

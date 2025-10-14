@@ -1,5 +1,6 @@
 using Menu.Remix.MixedUI;
 using System;
+using System.Linq;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
@@ -9,6 +10,43 @@ namespace RainWorldWallpaperMod
     /// </summary>
     public class WallpaperModOptions : OptionInterface
     {
+        // Enums for dropdowns
+        public enum CampaignChoice
+        {
+            White,      // Survivor
+            Yellow,     // Monk
+            Red,        // Hunter
+            Gourmand,   // Downpour
+            Artificer,  // Downpour
+            Rivulet,    // Downpour
+            Spearmaster,// Downpour
+            Saint       // Downpour
+        }
+
+        public enum RegionChoice
+        {
+            SU,  // Outskirts
+            HI,  // Industrial Complex
+            CC,  // Chimney Canopy
+            GW,  // Garbage Wastes
+            SH,  // Shaded Citadel
+            DS,  // Drainage System
+            SL,  // Shoreline
+            SI,  // Sky Islands
+            LF,  // Farm Arrays
+            UW,  // The Exterior
+            SS,  // Five Pebbles
+            SB,  // Subterranean
+            LM,  // Looks to the Moon (Downpour)
+            RM,  // Waterfront Facility (Downpour)
+            DM,  // Metropolis (Downpour)
+            LC,  // Outer Expanse (Downpour)
+            MS,  // Submerged Superstructure (Downpour)
+            VS,  // Pipeyard (Downpour)
+            CL,  // The Rot (Downpour)
+            OE   // Rubicon (Downpour)
+        }
+
         // Configuration values
         public readonly Configurable<float> RegionDuration;
         public readonly Configurable<float> TransitionDuration;
@@ -16,16 +54,18 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<float> HudFadeDelay;
         public readonly Configurable<bool> AlwaysShowHud;
         public readonly Configurable<string> StartRegion;
+        public readonly Configurable<string> SelectedCampaign;
 
         public WallpaperModOptions()
         {
-            // Bind configuration values with defaults
+            // Bind configuration values with defaults (using strings for enums to work with OpResourceSelector)
             RegionDuration = config.Bind("regionDuration", 300f);
             TransitionDuration = config.Bind("transitionDuration", 5f);
             StayDuration = config.Bind("stayDuration", 15f);
             HudFadeDelay = config.Bind("hudFadeDelay", 3f);
             AlwaysShowHud = config.Bind("alwaysShowHud", true);
-            StartRegion = config.Bind("startRegion", "SU");
+            StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
+            SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
         }
 
         public override void Initialize()
@@ -49,12 +89,52 @@ namespace RainWorldWallpaperMod
                 });
                 yPos -= lineHeight * 1.2f;
 
-                // Region Duration
-                OpTextBox regionDurationBox = new OpTextBox(RegionDuration, new Vector2(rightColumn, yPos - 5f), 80f);
-                regionDurationBox.description = "Duration in minutes to spend in each region (1-30)";
+                // Campaign Selection (NEW!) - using OpComboBox dropdown
+                var campaignDropdown = new OpComboBox(
+                    SelectedCampaign,
+                    new Vector2(rightColumn, yPos - 5f),
+                    160f,
+                    OpResourceSelector.GetEnumNames(null, typeof(CampaignChoice)).Select(li =>
+                    {
+                        li.displayName = GetCampaignDisplayName(li.name);
+                        return li;
+                    }).ToList()
+                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
+                campaignDropdown.description = "Choose which slugcat campaign to explore";
+
                 opTab.AddItems(new UIelement[]
                 {
-                    new OpLabel(leftColumn, yPos, "Region Duration (min):"),
+                    new OpLabel(leftColumn, yPos, "Campaign:"),
+                    campaignDropdown
+                });
+                yPos -= lineHeight;
+
+                // Start Region Selection - using OpComboBox dropdown
+                var regionDropdown = new OpComboBox(
+                    StartRegion,
+                    new Vector2(rightColumn, yPos - 5f),
+                    160f,
+                    OpResourceSelector.GetEnumNames(null, typeof(RegionChoice)).Select(li =>
+                    {
+                        li.displayName = GetRegionDisplayName(li.name);
+                        return li;
+                    }).ToList()
+                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
+                regionDropdown.description = "Choose starting region";
+
+                opTab.AddItems(new UIelement[]
+                {
+                    new OpLabel(leftColumn, yPos, "Start Region:"),
+                    regionDropdown
+                });
+                yPos -= lineHeight;
+
+                // Region Duration
+                OpTextBox regionDurationBox = new OpTextBox(RegionDuration, new Vector2(rightColumn, yPos - 5f), 80f);
+                regionDurationBox.description = "Duration in seconds to spend in each region (60-1800)";
+                opTab.AddItems(new UIelement[]
+                {
+                    new OpLabel(leftColumn, yPos, "Region Duration (sec):"),
                     regionDurationBox
                 });
                 yPos -= lineHeight;
@@ -97,16 +177,6 @@ namespace RainWorldWallpaperMod
                     new OpLabel(leftColumn, yPos + 2f, "Always Show HUD:"),
                     alwaysShowHudBox
                 });
-                yPos -= lineHeight;
-
-                // Start Region
-                OpTextBox startRegionBox = new OpTextBox(StartRegion, new Vector2(rightColumn, yPos - 5f), 80f);
-                startRegionBox.description = "Region code to start in (e.g., SU, HI, CC)";
-                opTab.AddItems(new UIelement[]
-                {
-                    new OpLabel(leftColumn, yPos, "Start Region Code:"),
-                    startRegionBox
-                });
                 yPos -= lineHeight * 1.2f;
 
                 // Control hints
@@ -134,6 +204,50 @@ namespace RainWorldWallpaperMod
             catch (Exception ex)
             {
                 WallpaperMod.Log?.LogError($"WallpaperModOptions: Failed to initialize UI - {ex}");
+            }
+        }
+
+        private string GetCampaignDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "White": return "Survivor";
+                case "Yellow": return "Monk";
+                case "Red": return "Hunter";
+                case "Gourmand": return "Gourmand (Downpour)";
+                case "Artificer": return "Artificer (Downpour)";
+                case "Rivulet": return "Rivulet (Downpour)";
+                case "Spearmaster": return "Spearmaster (Downpour)";
+                case "Saint": return "Saint (Downpour)";
+                default: return enumName;
+            }
+        }
+
+        private string GetRegionDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "SU": return "Outskirts";
+                case "HI": return "Industrial Complex";
+                case "CC": return "Chimney Canopy";
+                case "GW": return "Garbage Wastes";
+                case "SH": return "Shaded Citadel";
+                case "DS": return "Drainage System";
+                case "SL": return "Shoreline";
+                case "SI": return "Sky Islands";
+                case "LF": return "Farm Arrays";
+                case "UW": return "The Exterior";
+                case "SS": return "Five Pebbles";
+                case "SB": return "Subterranean";
+                case "LM": return "Looks to the Moon (DP)";
+                case "RM": return "Waterfront Facility (DP)";
+                case "DM": return "Metropolis (DP)";
+                case "LC": return "Outer Expanse (DP)";
+                case "MS": return "Submerged Superstructure (DP)";
+                case "VS": return "Pipeyard (DP)";
+                case "CL": return "The Rot (DP)";
+                case "OE": return "Rubicon (DP)";
+                default: return enumName;
             }
         }
 
@@ -165,6 +279,40 @@ namespace RainWorldWallpaperMod
                 HudFadeDelay.Value = 1f;
             else if (hudFadeDelay > 10f)
                 HudFadeDelay.Value = 10f;
+        }
+
+        // Helper method to convert campaign string to SlugcatStats.Name
+        public static SlugcatStats.Name GetSlugcatName(string campaignStr)
+        {
+            if (!Enum.TryParse<CampaignChoice>(campaignStr, out var campaign))
+            {
+                campaign = CampaignChoice.White;
+            }
+
+            switch (campaign)
+            {
+                case CampaignChoice.White: return SlugcatStats.Name.White;
+                case CampaignChoice.Yellow: return SlugcatStats.Name.Yellow;
+                case CampaignChoice.Red: return SlugcatStats.Name.Red;
+                // Downpour slugcats - these require ModManager.MSC check
+                case CampaignChoice.Gourmand: return new SlugcatStats.Name("Gourmand", false);
+                case CampaignChoice.Artificer: return new SlugcatStats.Name("Artificer", false);
+                case CampaignChoice.Rivulet: return new SlugcatStats.Name("Rivulet", false);
+                case CampaignChoice.Spearmaster: return new SlugcatStats.Name("Spearmaster", false);
+                case CampaignChoice.Saint: return new SlugcatStats.Name("Saint", false);
+                default: return SlugcatStats.Name.White;
+            }
+        }
+
+        // Helper method to get region code string
+        public static string GetRegionCode(string regionStr)
+        {
+            // Already a string, just validate and return
+            if (Enum.TryParse<RegionChoice>(regionStr, out var region))
+            {
+                return region.ToString();
+            }
+            return "SU"; // Default to Outskirts
         }
     }
 }
