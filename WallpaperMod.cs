@@ -30,7 +30,7 @@ namespace RainWorldWallpaperMod
             { "SI", "SI_A01" },
             { "LF", "LF_A01" },
             { "UW", "UW_A01" },
-            { "SS", "SU_A01" },
+            { "SS", "SS_A01" },
             { "SB", "SB_A01" },
             { "LM", "LM_A01" },
             { "RM", "RM_A01" },
