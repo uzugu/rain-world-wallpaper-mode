@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
@@ -51,6 +52,9 @@ namespace RainWorldWallpaperMod
         private List<int> unvisitedPositions = new List<int>();
         private int remainingJumps = 0;
 
+        // Room lock
+        private bool isRoomLocked = false;
+
         private bool hasInitializedHud = false;
         private readonly System.Random random = new System.Random();
         private bool spectatorPrepared;
@@ -75,6 +79,7 @@ namespace RainWorldWallpaperMod
         private bool lastEnterButton;
         private bool lastPlusButton;
         private bool lastMinusButton;
+        private bool lastLockButton;
 
         public WallpaperController(RainWorldGame game, string startRegion)
         {
@@ -111,6 +116,9 @@ namespace RainWorldWallpaperMod
 
             EnsureSpectatorState();
 
+            // Ghost marking disabled - worldGhost is per-echo, not global
+            // Echoes work differently than expected, leaving at karma 10 for now
+
             if (preparingWorldReload || !spectatorPrepared)
             {
                 if (preparingWorldReload)
@@ -146,7 +154,8 @@ namespace RainWorldWallpaperMod
                 RegionManager?.AdvanceToNextRegion();
             }
 
-            if (!isTransitioning && currentTimer >= stayDuration)
+            // Only auto-transition if not locked
+            if (!isTransitioning && currentTimer >= stayDuration && !isRoomLocked)
             {
                 StartTransitionToRandomRoom();
             }
@@ -423,6 +432,14 @@ namespace RainWorldWallpaperMod
                 AdjustRegionDuration(-baseStep);
             }
             lastMinusButton = minusButton;
+
+            // L key - toggle room lock
+            bool lockButton = Input.GetKey(KeyCode.L);
+            if (lockButton && !lastLockButton)
+            {
+                ToggleRoomLock();
+            }
+            lastLockButton = lockButton;
         }
 
         private void EnsureSpectatorState()
@@ -450,15 +467,18 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            if (Game.Players != null)
+            // Completely remove all player entities to create spectator mode
+            if (Game.Players != null && Game.Players.Count > 0)
             {
                 foreach (var abstractPlayer in Game.Players)
                 {
                     if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
                     {
                         realizedPlayer.RemoveFromRoom();
+                        realizedPlayer.Destroy();
                     }
                 }
+                Game.Players.Clear();
             }
 
             roomHistory.Clear();
@@ -467,10 +487,50 @@ namespace RainWorldWallpaperMod
             previousRoomName = string.Empty;
 
             currentRegionCode = Game.world.name ?? currentRegionCode;
+
+            // Temporarily disabled to test natural echo spawning
+            // EnableEchoSpawning();
+
             spectatorPrepared = true;
             currentTimer = stayDuration;
             regionTimerSeconds = 0f;
             preparingWorldReload = false;
+        }
+
+        /// <summary>
+        /// Set karma to maximum to allow echoes (ghosts) to spawn in wallpaper mode.
+        /// Echoes are now confirmed working with just karma=10, karmaCap=10, and cycleNumber=5.
+        /// </summary>
+        private void EnableEchoSpawning()
+        {
+            // Check if echo spawning is enabled in config
+            if (WallpaperMod.Options != null && !WallpaperMod.Options.EnableEchoes.Value)
+            {
+                WallpaperMod.Log?.LogInfo("WallpaperController: Echo spawning disabled in config");
+                return;
+            }
+
+            // Access the session from the game
+            if (Game?.session is StoryGameSession storySession &&
+                storySession.saveState?.deathPersistentSaveData != null)
+            {
+                // Set karma to maximum (10) to allow all echoes to spawn
+                storySession.saveState.deathPersistentSaveData.karma = 10;
+                storySession.saveState.deathPersistentSaveData.karmaCap = 10;
+
+                // Set cycle number to 5+ to simulate having played for several cycles
+                // Echoes require this to bypass the sleep requirement after priming
+                if (storySession.saveState.cycleNumber < 5)
+                {
+                    storySession.saveState.cycleNumber = 5;
+                }
+
+                WallpaperMod.Log?.LogInfo($"WallpaperController: Echo spawning enabled (Karma: 10/10, Cycle: {storySession.saveState.cycleNumber})");
+            }
+            else
+            {
+                WallpaperMod.Log?.LogWarning("WallpaperController: Could not enable echoes - not a story session or save state unavailable");
+            }
         }
 
         private void TryInitializeHud(RoomCamera camera)
@@ -524,8 +584,6 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Preparing new location after {currentTimer:F1}s");
-
             if (!string.IsNullOrEmpty(Game.world.name))
             {
                 currentRegionCode = Game.world.name;
@@ -543,7 +601,6 @@ namespace RainWorldWallpaperMod
                 if (totalPositions > 1 && currentCameraPositionIndex < totalPositions - 1)
                 {
                     shouldStayInCurrentRoom = true;
-                    WallpaperMod.Log?.LogInfo($"WallpaperController: Sequential mode - staying in room {currentTargetRoom.name}, showing position {currentCameraPositionIndex + 1}/{totalPositions}");
                 }
             }
             else if (cameraMode == WallpaperModOptions.CameraMode.RandomExploration &&
@@ -552,7 +609,6 @@ namespace RainWorldWallpaperMod
                      currentTargetRoom != null)
             {
                 shouldStayInCurrentRoom = true;
-                WallpaperMod.Log?.LogInfo($"WallpaperController: RandomExploration mode - staying in room {currentTargetRoom.name}, {remainingJumps} jumps remaining, {unvisitedPositions.Count} unvisited positions");
             }
 
             AbstractRoom selectedRoom;
@@ -585,7 +641,6 @@ namespace RainWorldWallpaperMod
             {
                 int camIndex = SelectCameraPosition(selectedRoom.realizedRoom.cameraPositions.Length, isNewRoom);
                 targetPosition = selectedRoom.realizedRoom.cameraPositions[camIndex];
-                WallpaperMod.Log?.LogInfo($"WallpaperController: Camera position {camIndex + 1}/{selectedRoom.realizedRoom.cameraPositions.Length} selected in room {selectedRoom.name}");
             }
             else
             {
@@ -613,6 +668,62 @@ namespace RainWorldWallpaperMod
             currentTimer = 0f;
 
             WallpaperMod.Log?.LogInfo($"WallpaperController: Transitioning to room {selectedRoom.name}");
+        }
+
+        private void StartTransitionToSpecificRoom(AbstractRoom targetRoom)
+        {
+            if (preparingWorldReload || !spectatorPrepared)
+            {
+                return;
+            }
+
+            if (Game.cameras == null || Game.cameras.Length == 0)
+            {
+                return;
+            }
+
+            var primaryCamera = Game.cameras[0];
+            startPosition = primaryCamera.pos;
+
+            if (targetRoom.realizedRoom == null)
+            {
+                targetRoom.RealizeRoom(Game.world, Game);
+            }
+
+            bool isNewRoom = targetRoom != currentTargetRoom;
+            if (targetRoom.realizedRoom != null &&
+                targetRoom.realizedRoom.cameraPositions != null &&
+                targetRoom.realizedRoom.cameraPositions.Length > 0)
+            {
+                int camIndex = SelectCameraPosition(targetRoom.realizedRoom.cameraPositions.Length, isNewRoom);
+                targetPosition = targetRoom.realizedRoom.cameraPositions[camIndex];
+            }
+            else
+            {
+                targetPosition = startPosition;
+            }
+
+            previousRoom = currentTargetRoom;
+            previousRoomName = currentRoomName;
+
+            currentTargetRoom = targetRoom;
+            nextRoomName = targetRoom.name;
+
+            // Add to history if it's a new room
+            if (isNewRoom && !roomHistory.Contains(targetRoom.name))
+            {
+                roomHistory.Add(targetRoom.name);
+                if (roomHistory.Count > MAX_HISTORY)
+                {
+                    roomHistory.RemoveAt(0);
+                }
+            }
+
+            isTransitioning = true;
+            transitionProgress = 0f;
+            currentTimer = 0f;
+
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Transitioning to specific room {targetRoom.name}");
         }
 
         private AbstractRoom SelectRandomRoom(AbstractRoom[] rooms)
@@ -705,8 +816,6 @@ namespace RainWorldWallpaperMod
             {
                 RegionManager?.OnRoomExplored();
             }
-
-            WallpaperMod.Log?.LogInfo("WallpaperController: Transition complete");
         }
 
         private float EaseInOutCubic(float t)
@@ -898,6 +1007,67 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
+        /// Toggle room lock (prevents automatic room transitions)
+        /// </summary>
+        public void ToggleRoomLock()
+        {
+            isRoomLocked = !isRoomLocked;
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Room lock {(isRoomLocked ? "ON" : "OFF")}");
+            Hud?.RegisterUserActivity();
+            settingsOverlay?.Refresh();
+        }
+
+        /// <summary>
+        /// Request a jump to a specific room
+        /// </summary>
+        public void RequestRoomChange(string roomName)
+        {
+            if (string.IsNullOrEmpty(roomName) || roomName == "Random")
+            {
+                return;
+            }
+
+            if (Game?.world?.abstractRooms == null)
+            {
+                WallpaperMod.Log?.LogWarning($"WallpaperController: Cannot change to room {roomName}, world not ready");
+                return;
+            }
+
+            // Find the room
+            AbstractRoom targetRoom = null;
+            foreach (var room in Game.world.abstractRooms)
+            {
+                if (room != null && string.Equals(room.name, roomName, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetRoom = room;
+                    break;
+                }
+            }
+
+            if (targetRoom == null)
+            {
+                WallpaperMod.Log?.LogWarning($"WallpaperController: Room {roomName} not found in current region");
+                return;
+            }
+
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Jumping to room {roomName}");
+
+            // Force immediate transition to this room
+            if (isTransitioning)
+            {
+                // Complete current transition first
+                transitionProgress = 1f;
+                CompleteTransition(Game.cameras[0]);
+            }
+
+            // Set up transition to target room
+            currentTargetRoom = targetRoom;
+            StartTransitionToSpecificRoom(targetRoom);
+        }
+
+        public bool IsRoomLocked => isRoomLocked;
+
+        /// <summary>
         /// Select camera position based on current camera mode
         /// </summary>
         private int SelectCameraPosition(int availablePositions, bool isNewRoom)
@@ -938,8 +1108,6 @@ namespace RainWorldWallpaperMod
 
                         // Decide how many more jumps to make (0 to remaining positions)
                         remainingJumps = unvisitedPositions.Count > 0 ? random.Next(unvisitedPositions.Count + 1) : 0;
-
-                        WallpaperMod.Log?.LogInfo($"WallpaperController: RandomExploration - starting at position {currentCameraPositionIndex + 1}/{availablePositions}, will make {remainingJumps} more jumps");
                     }
                     else
                     {
@@ -950,8 +1118,6 @@ namespace RainWorldWallpaperMod
                             currentCameraPositionIndex = unvisitedPositions[randomIndex];
                             unvisitedPositions.RemoveAt(randomIndex);
                             remainingJumps--;
-
-                            WallpaperMod.Log?.LogInfo($"WallpaperController: RandomExploration - jumping to position {currentCameraPositionIndex + 1}, {remainingJumps} jumps remaining");
                         }
                     }
                     return currentCameraPositionIndex;

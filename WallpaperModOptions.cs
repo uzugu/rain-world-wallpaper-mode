@@ -48,14 +48,24 @@ namespace RainWorldWallpaperMod
             OE   // Rubicon (Downpour)
         }
 
+        public enum CameraMode
+        {
+            RandomExploration,  // Random start, random jumps, random order (default)
+            Random,             // Pick one random camera position
+            Sequential,         // Cycle through all camera positions
+            FirstOnly           // Always use first camera position
+        }
+
         // Configuration values
         public readonly Configurable<float> RegionDuration;
         public readonly Configurable<float> TransitionDuration;
         public readonly Configurable<float> StayDuration;
         public readonly Configurable<float> HudFadeDelay;
         public readonly Configurable<bool> AlwaysShowHud;
+        public readonly Configurable<bool> EnableEchoes;
         public readonly Configurable<string> StartRegion;
         public readonly Configurable<string> SelectedCampaign;
+        public readonly Configurable<string> CameraModeConfig;
 
         public WallpaperModOptions()
         {
@@ -65,8 +75,10 @@ namespace RainWorldWallpaperMod
             StayDuration = config.Bind("stayDuration", 15f);
             HudFadeDelay = config.Bind("hudFadeDelay", 3f);
             AlwaysShowHud = config.Bind("alwaysShowHud", true);
+            EnableEchoes = config.Bind("enableEchoes", true);
             StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
             SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
+            CameraModeConfig = config.Bind("cameraMode", CameraMode.RandomExploration.ToString());
         }
 
         public override void Initialize()
@@ -120,6 +132,18 @@ namespace RainWorldWallpaperMod
                 alwaysShowHudBox.description = "If enabled, the HUD will always be visible and won't fade out";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Show HUD:"));
                 uiElements.Add(alwaysShowHudBox);
+                leftYPos -= lineHeight;
+
+                // Enable Echoes
+                OpCheckBox enableEchoesBox = new OpCheckBox(EnableEchoes, new Vector2(leftColumnControl, leftYPos));
+                enableEchoesBox.description = "If enabled, karma will be set to maximum to allow echoes (spiritual beings) to spawn";
+                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Enable Echoes:"));
+                uiElements.Add(enableEchoesBox);
+                leftYPos -= lineHeight;
+
+                // Camera Mode label (dropdown added later)
+                float cameraModeYPos = leftYPos;
+                uiElements.Add(new OpLabel(leftColumnLabel, cameraModeYPos, "Camera Mode:"));
 
                 // === RIGHT COLUMN ===
                 float rightYPos = yPos;
@@ -187,8 +211,20 @@ namespace RainWorldWallpaperMod
                 ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
                 regionDropdown.description = "Choose starting region";
 
+                var cameraModeDropdown = new OpComboBox(
+                    CameraModeConfig,
+                    new Vector2(leftColumnControl, cameraModeYPos - 5f),
+                    140f,
+                    OpResourceSelector.GetEnumNames(null, typeof(CameraMode)).Select(li =>
+                    {
+                        li.displayName = GetCameraModeDisplayName(li.name);
+                        return li;
+                    }).ToList()
+                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
+                cameraModeDropdown.description = "How to select camera positions in large rooms";
+
                 // Add dropdowns last to ensure they render on top
-                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown });
+                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown });
 
                 WallpaperMod.Log?.LogInfo("WallpaperModOptions: UI initialized successfully");
             }
@@ -304,6 +340,28 @@ namespace RainWorldWallpaperMod
                 return region.ToString();
             }
             return "SU"; // Default to Outskirts
+        }
+
+        // Helper method to convert camera mode string to enum
+        public static CameraMode GetCameraMode(string modeStr)
+        {
+            if (Enum.TryParse<CameraMode>(modeStr, out var mode))
+            {
+                return mode;
+            }
+            return CameraMode.RandomExploration;
+        }
+
+        private string GetCameraModeDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "RandomExploration": return "Random Exploration";
+                case "Random": return "Single Random";
+                case "Sequential": return "All Positions";
+                case "FirstOnly": return "First Only";
+                default: return enumName;
+            }
         }
     }
 }

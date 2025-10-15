@@ -21,14 +21,21 @@ namespace RainWorldWallpaperMod
         private readonly FLabel quickTravelTitle;
         private readonly FLabel campaignLabel;
         private readonly FLabel regionLabel;
+        private readonly FLabel cameraModeLabel;
+        private readonly FLabel roomLabel;
+        private readonly FLabel lockLabel;
         private readonly FLabel travelInstructions;
 
         private List<string> availableCampaigns;
         private List<string> availableRegions;
+        private List<string> availableCameraModes;
+        private List<string> availableRooms;
         private int selectedCampaignIndex;
         private int selectedRegionIndex;
+        private int selectedCameraModeIndex;
+        private int selectedRoomIndex;
 
-        // Focus tracking: 0 = campaign, 1 = region
+        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock
         private int currentFocus = 0;
 
         private bool isVisible;
@@ -68,8 +75,11 @@ namespace RainWorldWallpaperMod
 
             campaignLabel = CreateLabel(100f, 320f, string.Empty);
             regionLabel = CreateLabel(100f, 290f, string.Empty);
+            cameraModeLabel = CreateLabel(100f, 260f, string.Empty);
+            roomLabel = CreateLabel(100f, 230f, string.Empty);
+            lockLabel = CreateLabel(100f, 200f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 250f, "Up/Down -> select | Left/Right -> cycle | Enter/G -> travel");
+            travelInstructions = CreateLabel(100f, 170f, "Up/Down -> select | Left/Right -> cycle | L -> toggle lock | Enter/G -> travel");
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
@@ -81,6 +91,9 @@ namespace RainWorldWallpaperMod
             container.AddChild(quickTravelTitle);
             container.AddChild(campaignLabel);
             container.AddChild(regionLabel);
+            container.AddChild(cameraModeLabel);
+            container.AddChild(roomLabel);
+            container.AddChild(lockLabel);
             container.AddChild(travelInstructions);
 
             container.isVisible = false;
@@ -101,6 +114,9 @@ namespace RainWorldWallpaperMod
             {
                 hostContainer.AddChild(container);
                 container.MoveToFront();
+
+                // Refresh room list when opening overlay (in case region changed)
+                RefreshRoomList();
             }
 
             container.isVisible = visible;
@@ -144,6 +160,42 @@ namespace RainWorldWallpaperMod
                 regionLabel.text = $"{prefix}Region:    < {regionName} >";
                 regionLabel.color = isFocused ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
             }
+
+            if (availableCameraModes != null && availableCameraModes.Count > 0)
+            {
+                string modeName = GetCameraModeDisplayName(availableCameraModes[selectedCameraModeIndex]);
+                bool isFocused = currentFocus == 2;
+                string prefix = isFocused ? ">> " : "   ";
+                cameraModeLabel.text = $"{prefix}Camera:    < {modeName} >";
+                cameraModeLabel.color = isFocused ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
+            }
+
+            if (availableRooms != null && availableRooms.Count > 0)
+            {
+                bool regionMatches = IsSelectedRegionCurrent();
+                string roomName = availableRooms[selectedRoomIndex];
+                bool isFocused = currentFocus == 3;
+                string prefix = isFocused ? ">> " : "   ";
+
+                if (!regionMatches)
+                {
+                    // Show that room selection is disabled when region doesn't match
+                    roomLabel.text = $"{prefix}Room:      < Random > (travel to region first)";
+                    roomLabel.color = new Color(0.5f, 0.5f, 0.5f, 0.8f); // Gray out
+                }
+                else
+                {
+                    roomLabel.text = $"{prefix}Room:      < {roomName} >";
+                    roomLabel.color = isFocused ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
+                }
+            }
+
+            // Lock toggle
+            bool isLocked = controller?.IsRoomLocked ?? false;
+            bool isFocusedLock = currentFocus == 4;
+            string lockPrefix = isFocusedLock ? ">> " : "   ";
+            lockLabel.text = $"{lockPrefix}Lock Room: [{(isLocked ? "ON" : "OFF")}]";
+            lockLabel.color = isFocusedLock ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
         }
 
         public void Destroy()
@@ -193,11 +245,57 @@ namespace RainWorldWallpaperMod
                     selectedRegionIndex = index;
                 }
             }
+
+            // Get all camera modes from enum
+            availableCameraModes = Enum.GetNames(typeof(WallpaperModOptions.CameraMode)).ToList();
+            selectedCameraModeIndex = 0;
+
+            // Try to match current camera mode
+            if (WallpaperMod.Options != null)
+            {
+                string currentMode = WallpaperMod.Options.CameraModeConfig.Value;
+                int index = availableCameraModes.FindIndex(m => m == currentMode);
+                if (index >= 0)
+                {
+                    selectedCameraModeIndex = index;
+                }
+            }
+
+            // Get all rooms in current region
+            RefreshRoomList();
+        }
+
+        private void RefreshRoomList()
+        {
+            availableRooms = new List<string> { "Random" };
+            selectedRoomIndex = 0;
+
+            if (controller?.Game?.world?.abstractRooms != null)
+            {
+                foreach (var room in controller.Game.world.abstractRooms)
+                {
+                    if (room != null && !room.gate && !string.IsNullOrEmpty(room.name))
+                    {
+                        availableRooms.Add(room.name);
+                    }
+                }
+
+                // Try to match current room
+                string currentRoom = controller.CurrentRoomName;
+                if (!string.IsNullOrEmpty(currentRoom))
+                {
+                    int index = availableRooms.FindIndex(r => string.Equals(r, currentRoom, StringComparison.OrdinalIgnoreCase));
+                    if (index >= 0)
+                    {
+                        selectedRoomIndex = index;
+                    }
+                }
+            }
         }
 
         public void CycleFocus(int direction)
         {
-            currentFocus = (currentFocus + direction + 2) % 2;
+            currentFocus = (currentFocus + direction + 5) % 5;
             RefreshQuickTravelLabels();
         }
 
@@ -207,10 +305,40 @@ namespace RainWorldWallpaperMod
             {
                 CycleCampaign(direction);
             }
-            else
+            else if (currentFocus == 1)
             {
                 CycleRegion(direction);
             }
+            else if (currentFocus == 2)
+            {
+                CycleCameraMode(direction);
+            }
+            else if (currentFocus == 3)
+            {
+                // Only allow room cycling if selected region matches current region
+                if (IsSelectedRegionCurrent())
+                {
+                    CycleRoom(direction);
+                }
+                // Otherwise do nothing - room selection disabled
+            }
+            else if (currentFocus == 4)
+            {
+                // Lock is toggled, not cycled
+                controller?.ToggleRoomLock();
+                RefreshQuickTravelLabels();
+            }
+        }
+
+        private bool IsSelectedRegionCurrent()
+        {
+            if (availableRegions == null || availableRegions.Count == 0) return false;
+            if (controller?.RegionMgr == null) return false;
+
+            string selectedRegion = availableRegions[selectedRegionIndex];
+            string currentRegion = controller.RegionMgr.GetCurrentRegion();
+
+            return string.Equals(selectedRegion, currentRegion, StringComparison.OrdinalIgnoreCase);
         }
 
         private void CycleCampaign(int direction)
@@ -226,27 +354,73 @@ namespace RainWorldWallpaperMod
             if (availableRegions == null || availableRegions.Count == 0) return;
 
             selectedRegionIndex = (selectedRegionIndex + direction + availableRegions.Count) % availableRegions.Count;
+
+            // When region changes, reset room selection to Random
+            selectedRoomIndex = 0; // "Random" is always index 0
+
+            RefreshQuickTravelLabels();
+        }
+
+        private void CycleCameraMode(int direction)
+        {
+            if (availableCameraModes == null || availableCameraModes.Count == 0) return;
+
+            selectedCameraModeIndex = (selectedCameraModeIndex + direction + availableCameraModes.Count) % availableCameraModes.Count;
+            RefreshQuickTravelLabels();
+        }
+
+        private void CycleRoom(int direction)
+        {
+            if (availableRooms == null || availableRooms.Count == 0) return;
+
+            selectedRoomIndex = (selectedRoomIndex + direction + availableRooms.Count) % availableRooms.Count;
             RefreshQuickTravelLabels();
         }
 
         public void ApplyTravel()
         {
-            if (availableCampaigns == null || availableRegions == null) return;
+            if (availableCampaigns == null || availableRegions == null || availableCameraModes == null || availableRooms == null) return;
 
             string selectedCampaign = availableCampaigns[selectedCampaignIndex];
             string selectedRegion = availableRegions[selectedRegionIndex];
+            string selectedCameraMode = availableCameraModes[selectedCameraModeIndex];
+            string selectedRoom = availableRooms[selectedRoomIndex];
 
-            WallpaperMod.Log?.LogInfo($"Quick Travel: Campaign={selectedCampaign}, Region={selectedRegion}");
+            bool regionChanging = !IsSelectedRegionCurrent();
+
+            WallpaperMod.Log?.LogInfo($"Quick Travel: Campaign={selectedCampaign}, Region={selectedRegion}, CameraMode={selectedCameraMode}, Room={selectedRoom}");
 
             // Update the config
             if (WallpaperMod.Options != null)
             {
                 WallpaperMod.Options.SelectedCampaign.Value = selectedCampaign;
                 WallpaperMod.Options.StartRegion.Value = selectedRegion;
+                WallpaperMod.Options.CameraModeConfig.Value = selectedCameraMode;
             }
 
-            // Trigger region change through the controller
-            controller?.RequestRegionChange(selectedRegion);
+            // Update camera mode in controller
+            controller?.SetCameraMode(WallpaperModOptions.GetCameraMode(selectedCameraMode));
+
+            // If changing regions, do that first (room change will happen after region loads)
+            if (regionChanging)
+            {
+                controller?.RequestRegionChange(selectedRegion);
+                // Room list will be refreshed when overlay is opened again in new region
+            }
+            else
+            {
+                // If staying in same region and a specific room is selected, jump to it
+                if (selectedRoom != "Random")
+                {
+                    controller?.RequestRoomChange(selectedRoom);
+                }
+            }
+        }
+
+        public void ToggleLockShortcut()
+        {
+            controller?.ToggleRoomLock();
+            RefreshQuickTravelLabels();
         }
 
         private string GetCampaignDisplayName(string enumName)
@@ -289,6 +463,18 @@ namespace RainWorldWallpaperMod
                 case "VS": return "Pipeyard";
                 case "CL": return "The Rot";
                 case "OE": return "Rubicon";
+                default: return enumName;
+            }
+        }
+
+        private string GetCameraModeDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "RandomExploration": return "Random Explore";
+                case "Random": return "Single Random";
+                case "Sequential": return "All Angles";
+                case "FirstOnly": return "First Only";
                 default: return enumName;
             }
         }
