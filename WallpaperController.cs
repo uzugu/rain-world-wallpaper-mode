@@ -13,6 +13,7 @@ namespace RainWorldWallpaperMod
         public RegionManager RegionManager { get; }
         public WallpaperHUD Hud { get; private set; }
         public RainWorldGame Game { get; }
+        public EchoMusicManager EchoMusic { get; private set; }
 
         // Transition settings
         private float transitionDuration = 5f;
@@ -65,6 +66,10 @@ namespace RainWorldWallpaperMod
         private WallpaperSettingsOverlay settingsOverlay;
         private bool axisSkipActive;
 
+        // Player cleanup tracking - only check for a few frames after initialization
+        private int framesWithoutPlayers = 0;
+        private const int PLAYER_CHECK_FRAMES = 30; // Check for ~0.5 seconds at 60fps
+
         // Button state tracking for reliable input
         private bool lastPauseButton;
         private bool lastToggleOverlayButton;
@@ -87,6 +92,7 @@ namespace RainWorldWallpaperMod
 
             currentRegionCode = startRegion;
             RegionManager = new RegionManager(this, startRegion);
+            EchoMusic = new EchoMusicManager(game);
 
             // Load settings from config
             if (WallpaperMod.Options != null)
@@ -164,6 +170,9 @@ namespace RainWorldWallpaperMod
                 UpdateTransition(dt);
             }
 
+            // Update echo music volume
+            EchoMusic?.Update();
+
             Hud?.Update();
         }
 
@@ -199,6 +208,7 @@ namespace RainWorldWallpaperMod
         {
             Hud?.Destroy();
             RegionManager?.Cleanup();
+            EchoMusic?.Shutdown();
             settingsOverlay?.Destroy();
             settingsOverlay = null;
             hasInitializedSettingsOverlay = false;
@@ -444,11 +454,6 @@ namespace RainWorldWallpaperMod
 
         private void EnsureSpectatorState()
         {
-            if (spectatorPrepared)
-            {
-                return;
-            }
-
             if (Game?.world == null)
             {
                 return;
@@ -459,6 +464,7 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
+            // Always detach camera from creatures
             foreach (var camera in Game.cameras)
             {
                 if (camera != null)
@@ -467,18 +473,33 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            // Completely remove all player entities to create spectator mode
-            if (Game.Players != null && Game.Players.Count > 0)
+            // Check for and remove player entities for the first ~30 frames after initialization
+            // This catches players that spawn during world load without checking forever
+            if (framesWithoutPlayers < PLAYER_CHECK_FRAMES)
             {
-                foreach (var abstractPlayer in Game.Players)
+                if (Game.Players != null && Game.Players.Count > 0)
                 {
-                    if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
+                    foreach (var abstractPlayer in Game.Players)
                     {
-                        realizedPlayer.RemoveFromRoom();
-                        realizedPlayer.Destroy();
+                        if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
+                        {
+                            realizedPlayer.RemoveFromRoom();
+                            realizedPlayer.Destroy();
+                        }
                     }
+                    Game.Players.Clear();
+                    framesWithoutPlayers = 0; // Reset counter if we found players
                 }
-                Game.Players.Clear();
+                else
+                {
+                    framesWithoutPlayers++;
+                }
+            }
+
+            // Only run initialization logic once
+            if (spectatorPrepared)
+            {
+                return;
             }
 
             roomHistory.Clear();
@@ -804,6 +825,9 @@ namespace RainWorldWallpaperMod
                     currentRoomName = nextRoomName;
                 }
                 nextRoomName = string.Empty;
+
+                // Check for echo music when entering new room
+                EchoMusic?.OnRoomChanged(currentTargetRoom);
             }
 
             if (previousRoom != null && previousRoom.realizedRoom != null && previousRoom != currentTargetRoom)
@@ -874,6 +898,7 @@ namespace RainWorldWallpaperMod
             hasInitializedSettingsOverlay = false;
             settingsMenuVisible = false;
             axisSkipActive = false;
+            framesWithoutPlayers = 0; // Reset player check counter for new region
         }
 
         private void ForceImmediateLocationChange()
