@@ -66,9 +66,9 @@ namespace RainWorldWallpaperMod
         private WallpaperSettingsOverlay settingsOverlay;
         private bool axisSkipActive;
 
-        // Player cleanup tracking - only check for a few frames after initialization
-        private int framesWithoutPlayers = 0;
-        private const int PLAYER_CHECK_FRAMES = 30; // Check for ~0.5 seconds at 60fps
+        // Player cleanup tracking - check continuously but only log when found
+        private int playerCheckCounter = 0;
+        private const int PLAYER_CHECK_INTERVAL = 40; // Check every 40 frames (~0.67 seconds at 60fps)
 
         // Button state tracking for reliable input
         private bool lastPauseButton;
@@ -170,7 +170,6 @@ namespace RainWorldWallpaperMod
                 UpdateTransition(dt);
             }
 
-            // Update echo music volume
             EchoMusic?.Update();
 
             Hud?.Update();
@@ -473,12 +472,16 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            // Check for and remove player entities for the first ~30 frames after initialization
-            // This catches players that spawn during world load without checking forever
-            if (framesWithoutPlayers < PLAYER_CHECK_FRAMES)
+            // Periodically check for and remove player entities
+            // Players can spawn at any time, so we check continuously but not every frame
+            playerCheckCounter++;
+            if (playerCheckCounter >= PLAYER_CHECK_INTERVAL)
             {
+                playerCheckCounter = 0;
+
                 if (Game.Players != null && Game.Players.Count > 0)
                 {
+                    WallpaperMod.Log?.LogDebug($"WallpaperController: Removing {Game.Players.Count} player(s)");
                     foreach (var abstractPlayer in Game.Players)
                     {
                         if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
@@ -488,11 +491,6 @@ namespace RainWorldWallpaperMod
                         }
                     }
                     Game.Players.Clear();
-                    framesWithoutPlayers = 0; // Reset counter if we found players
-                }
-                else
-                {
-                    framesWithoutPlayers++;
                 }
             }
 
@@ -825,9 +823,6 @@ namespace RainWorldWallpaperMod
                     currentRoomName = nextRoomName;
                 }
                 nextRoomName = string.Empty;
-
-                // Check for echo music when entering new room
-                EchoMusic?.OnRoomChanged(currentTargetRoom);
             }
 
             if (previousRoom != null && previousRoom.realizedRoom != null && previousRoom != currentTargetRoom)
@@ -840,6 +835,9 @@ namespace RainWorldWallpaperMod
             {
                 RegionManager?.OnRoomExplored();
             }
+
+            // Notify echo music manager of room change (for all room changes, not just new rooms)
+            EchoMusic?.OnRoomChanged(currentTargetRoom);
         }
 
         private float EaseInOutCubic(float t)
@@ -898,7 +896,7 @@ namespace RainWorldWallpaperMod
             hasInitializedSettingsOverlay = false;
             settingsMenuVisible = false;
             axisSkipActive = false;
-            framesWithoutPlayers = 0; // Reset player check counter for new region
+            playerCheckCounter = 0; // Reset player check counter for new region
         }
 
         private void ForceImmediateLocationChange()

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Music;
 
 namespace RainWorldWallpaperMod
 {
@@ -12,6 +13,7 @@ namespace RainWorldWallpaperMod
         private AbstractRoom echoRoom;  // The room with the echo
         private bool echoMusicPlaying;
         private Ghost currentEcho;
+        private static EchoMusicManager activeInstance;  // Track active instance for hook
 
         // Room distance settings
         private const int MAX_ROOM_DISTANCE = 3;  // Can hear up to 3 rooms away
@@ -40,31 +42,86 @@ namespace RainWorldWallpaperMod
             echoRoom = null;
             echoMusicPlaying = false;
             currentEcho = null;
+
+            activeInstance = this;
+
+            WallpaperMod.Log?.LogInfo("EchoMusicManager: Initialized - will disable audio filter only");
         }
 
         /// <summary>
-        /// Update volume - fades in when in echo room
+        /// Update - continuously disable Ghost's audio filter to prevent distortion
         /// </summary>
         public void Update()
         {
-            if (!echoMusicPlaying || game?.manager?.musicPlayer == null)
+            if (game?.cameras == null || game.cameras.Length == 0)
             {
                 return;
             }
 
-            // Smoothly lerp to target volume
-            currentVolume = Mathf.Lerp(currentVolume, targetVolume, VOLUME_LERP_SPEED);
+            // Check all possible locations for AudioHighPassFilter
+            // Ghost can apply filters to various audio sources
 
-            // Apply volume to music player
-            if (game.manager.musicPlayer.song != null)
+            // 1. Check musicPlayer.gameObj
+            if (game.manager?.musicPlayer?.gameObj != null)
             {
-                game.manager.musicPlayer.song.volume = currentVolume;
+                DisableAudioFilters(game.manager.musicPlayer.gameObj, "MusicPlayer");
             }
 
-            // Stop music completely if volume reaches 0
-            if (currentVolume < 0.01f && targetVolume == 0f)
+            // 2. Check all AudioSources in the scene for filters
+            var camera = game.cameras[0];
+            if (camera != null)
             {
-                StopEchoMusic();
+                // Use reflection to find all GameObject properties that might have AudioSources
+                var cameraType = camera.GetType();
+                var fields = cameraType.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                foreach (var field in fields)
+                {
+                    if (field.FieldType == typeof(GameObject))
+                    {
+                        var fieldObj = field.GetValue(camera) as GameObject;
+                        if (fieldObj != null)
+                        {
+                            DisableAudioFilters(fieldObj, $"Camera.{field.Name}");
+                        }
+                    }
+                }
+            }
+        }
+
+        private void DisableAudioFilters(GameObject target, string targetName)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            var components = target.GetComponents<UnityEngine.Component>();
+            foreach (var component in components)
+            {
+                if (component != null && component.GetType().Name == "AudioHighPassFilter")
+                {
+                    var componentType = component.GetType();
+
+                    // Disable the filter
+                    var enabledProp = componentType.GetProperty("enabled");
+                    if (enabledProp != null)
+                    {
+                        bool isEnabled = (bool)enabledProp.GetValue(component, null);
+                        if (isEnabled)
+                        {
+                            enabledProp.SetValue(component, false, null);
+                            WallpaperMod.Log?.LogInfo($"EchoMusicManager: Disabled AudioHighPassFilter on {targetName}");
+                        }
+                    }
+
+                    // Also force cutoff to minimum as backup
+                    var cutoffProp = componentType.GetProperty("cutoffFrequency");
+                    if (cutoffProp != null)
+                    {
+                        cutoffProp.SetValue(component, 10f, null);
+                    }
+                }
             }
         }
 
@@ -75,13 +132,17 @@ namespace RainWorldWallpaperMod
         {
             if (newRoom == null || game == null)
             {
+                WallpaperMod.Log?.LogWarning($"EchoMusic: OnRoomChanged called but newRoom or game is null");
                 return;
             }
+
+            WallpaperMod.Log?.LogInfo($"EchoMusic: ===== Entered room {newRoom.name} in region {newRoom.world?.name} =====");
 
             // Check if this room has an echo
             Ghost echo = FindEcho(newRoom);
             if (echo != null)
             {
+                WallpaperMod.Log?.LogInfo($"EchoMusic: Found echo in room {newRoom.name}");
                 // Found an echo in this room - set it as the echo room
                 if (echoRoom != newRoom)
                 {
@@ -91,11 +152,13 @@ namespace RainWorldWallpaperMod
                 }
                 // In the echo room = full volume
                 targetVolume = 1f;
+                WallpaperMod.Log?.LogInfo($"EchoMusic: In echo room, setting target volume to 1.0");
             }
             else if (echoRoom != null)
             {
                 // We're not in the echo room, but check if we're nearby
                 int distance = GetRoomDistance(newRoom, echoRoom);
+                WallpaperMod.Log?.LogInfo($"EchoMusic: Distance from echo room: {distance}");
 
                 if (distance <= MAX_ROOM_DISTANCE)
                 {
@@ -106,6 +169,7 @@ namespace RainWorldWallpaperMod
                     // Distance 3 = 3 rooms away = 0.1 volume
                     float volumeByDistance = 1f - (distance / (float)(MAX_ROOM_DISTANCE + 1));
                     targetVolume = Mathf.Max(0.1f, volumeByDistance);
+                    WallpaperMod.Log?.LogInfo($"EchoMusic: Setting target volume to {targetVolume:F2} based on distance");
 
                     // Start music if not already playing
                     if (!echoMusicPlaying)
@@ -115,14 +179,22 @@ namespace RainWorldWallpaperMod
                 }
                 else
                 {
-                    // Too far away - fade out
+                    // Too far away - stop music completely
+                    WallpaperMod.Log?.LogInfo($"EchoMusic: Too far away, fading out");
                     targetVolume = 0f;
+                    if (echoMusicPlaying && currentVolume < 0.05f)
+                    {
+                        StopEchoMusic();
+                        echoRoom = null;
+                        currentEcho = null;
+                    }
                 }
             }
-            else
+            else if (echoMusicPlaying && currentVolume < 0.05f)
             {
-                // No echo room at all - fade out
-                targetVolume = 0f;
+                // No echo room at all - stop music
+                WallpaperMod.Log?.LogInfo($"EchoMusic: No echo room, stopping");
+                StopEchoMusic();
             }
         }
 
@@ -227,11 +299,20 @@ namespace RainWorldWallpaperMod
             {
                 WallpaperMod.Log?.LogInfo($"EchoMusicManager: Playing echo music '{songName}' for region {regionCode}");
 
+                // Check if this song is already playing
+                if (game.manager.musicPlayer.song != null && game.manager.musicPlayer.song.name == songName)
+                {
+                    WallpaperMod.Log?.LogInfo($"EchoMusicManager: Song '{songName}' already playing, skipping request");
+                    echoMusicPlaying = true;
+                    return;
+                }
+
                 // Request the music player to play the echo track
+                // The hook will prevent the Ghost from interfering
                 game.manager.musicPlayer.GameRequestsSong(new MusicEvent
                 {
                     songName = songName,
-                    prio = 100f,  // High priority to override ambient music
+                    prio = 10f,  // Lower priority to let it blend
                     fadeInTime = 40f,  // Quick fade in
                     cyclesRest = 0
                 });
@@ -267,11 +348,17 @@ namespace RainWorldWallpaperMod
         /// </summary>
         public void Shutdown()
         {
-            StopEchoMusic();
+            if (activeInstance == this)
+            {
+                activeInstance = null;
+            }
+
             echoRoom = null;
             currentEcho = null;
             currentVolume = 0f;
             targetVolume = 0f;
+
+            WallpaperMod.Log?.LogInfo("EchoMusicManager: Shutdown");
         }
     }
 }
