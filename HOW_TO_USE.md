@@ -102,46 +102,44 @@ To change these, edit the source code and rebuild.
 - Verify `modinfo.json` exists
 - Verify `plugins/RainWorldWallpaperMod.dll` exists
 
-## Console Messages
+## Controls
 
-When active, you'll see these messages in BepInEx console:
+| Key | Action |
+| --- | --- |
+| **F9** | Toggle Wallpaper Mode ON/OFF |
+| **F1 / Tab** | Toggle Settings Overlay |
+| **H** | Toggle HUD visibility |
+| **L** | Lock/Unlock current room (pauses timer) |
+| **Right Arrow / D** | Jump to **Next Room** (Random) |
+| **Left Arrow / A** | Jump to **Previous Room** (History) |
+| **Up / Down / W / S** | Cycle **Camera Positions** in current room |
+| **G** | Force jump to **Next Region** |
+| **B** | Force jump to **Previous Region** |
+| **Esc** | Return to Main Menu |
 
-```
-[Info   : Rain World Wallpaper Mode] Wallpaper Mode ACTIVATED
-[Info   : Rain World Wallpaper Mode] Now exploring region: SU
-[Info   : Rain World Wallpaper Mode] Starting transition to random room
-[Info   : Rain World Wallpaper Mode] Transitioning to room: SU_A23
-[Info   : Rain World Wallpaper Mode] Transition complete
-```
+## Features
 
-## Tips
+### Chaos Mode & Slugpups 🐱
+- **Chaos Mode**: Spawns random creatures in the room for a lively environment.
+- **Slugpups**: Now spawn **very frequently**! Look out for them playing around.
+- **Scavengers**: Also spawn frequently to interact with the world.
 
-1. **Use Safari Mode** for the best experience - it's already designed for spectating
-2. **Pick interesting regions** - Some have more diverse rooms than others
-3. **Leave it running** - Perfect as an actual desktop wallpaper or background
-4. **Toggle freely** - Turn it on/off whenever you want
+### Navigation
+- **Smart History**: Use Left Arrow/A to go back to rooms you just visited.
+- **Camera Control**: Use Up/Down to see different angles of the same room.
+- **Room Lock**: Press L to stay in a beautiful room as long as you want. The timer pauses!
 
-## What's Next
+### Rain Cycle
+- The mod tracks the rain cycle.
+- When the day ends, it automatically switches to a new region to avoid the rain (unless the room is locked!).
 
-Future enhancements planned:
-- Automatic region switching
-- Fade transitions between regions
-- Configuration UI in Remix
-- Creature following mode
-- Music synchronization
-- Custom timing presets
-
-## Files
-
-- **Source**: `C:\Users\uzuik\Documents\VRmakes\Projects\RainWorldWallpaperMod\`
-- **Installed**: `E:\SteamLibrary\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\vrmakes.wallpapermod\`
-- **Logs**: `E:\SteamLibrary\steamapps\common\Rain World\BepInEx\LogOutput.log`
+## Configuration
+You can adjust settings in the **Remix** menu or use the in-game **Overlay (F1/Tab)**.
 
 ---
 
 **Mod ID**: `vrmakes.wallpapermod`
-**Version**: 1.0.0
-**Toggle Key**: F9
-**Status**: ✅ Fully Functional
+**Version**: 1.1.0
+**Status**: ✅ Fully Functional with Navigation & Chaos
 
 Enjoy your Rain World wallpaper experience! 🌧️

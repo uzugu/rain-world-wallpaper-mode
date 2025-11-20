@@ -159,7 +159,10 @@ namespace RainWorldWallpaperMod
 
             HandleInput();
 
-            currentTimer += dt;
+            if (!isRoomLocked)
+            {
+                currentTimer += dt;
+            }
 
             // Rain-based region changing
             HandleRainDetection(dt);
@@ -326,7 +329,7 @@ namespace RainWorldWallpaperMod
             }
 
             // Update countdown if active
-            if (isRainCountdownActive)
+            if (isRainCountdownActive && !isRoomLocked)
             {
                 rainCountdownTimer += dt;
 
@@ -538,6 +541,29 @@ namespace RainWorldWallpaperMod
                 ToggleRoomLock();
             }
             lastLockButton = lockButton;
+
+            // Up/Down arrows - cycle camera views
+            bool camUpButton = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W);
+            if (camUpButton && !lastUpArrowButton)
+            {
+                CycleCameraPosition(1);
+            }
+            lastUpArrowButton = camUpButton;
+
+            bool camDownButton = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
+            if (camDownButton && !lastDownArrowButton)
+            {
+                CycleCameraPosition(-1);
+            }
+            lastDownArrowButton = camDownButton;
+
+            // Left Arrow/A - Previous Room
+            bool navLeftButton = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A);
+            if (navLeftButton && !lastLeftArrowButton)
+            {
+                GoToPreviousRoom();
+            }
+            lastLeftArrowButton = navLeftButton;
         }
 
         private void EnsureSpectatorState()
@@ -1203,6 +1229,70 @@ namespace RainWorldWallpaperMod
         }
 
         public bool IsRoomLocked => isRoomLocked;
+
+        /// <summary>
+        /// Go to the previous room in history
+        /// </summary>
+        public void GoToPreviousRoom()
+        {
+            if (roomHistory.Count < 2)
+            {
+                WallpaperMod.Log?.LogInfo("WallpaperController: No previous room in history");
+                return;
+            }
+
+            // Current room is at index Count-1
+            // Previous room is at index Count-2
+            string previousRoomName = roomHistory[roomHistory.Count - 2];
+            
+            // Remove current room from history so we can go back "up" the stack
+            roomHistory.RemoveAt(roomHistory.Count - 1);
+            
+            // We also need to remove the previous room (which is now at Count-1) 
+            // because RequestRoomChange -> StartTransitionToSpecificRoom will add it back if it's not there?
+            // Actually, StartTransitionToSpecificRoom only adds if !Contains.
+            // Since it IS there, it won't add it.
+            // But we want to maintain the stack illusion. 
+            // If we just go to it, history becomes [..., Prev]. Current is gone.
+            // This is correct for a "Back" button.
+            
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Going back to {previousRoomName}");
+            RequestRoomChange(previousRoomName);
+        }
+
+        /// <summary>
+        /// Cycle through camera positions in the current room
+        /// </summary>
+        public void CycleCameraPosition(int direction)
+        {
+            if (Game?.cameras == null || Game.cameras.Length == 0 || Game.cameras[0].room == null)
+            {
+                return;
+            }
+
+            var camera = Game.cameras[0];
+            var room = camera.room;
+            int totalPositions = room.cameraPositions.Length;
+
+            if (totalPositions <= 1)
+            {
+                return;
+            }
+
+            currentCameraPositionIndex = (currentCameraPositionIndex + direction) % totalPositions;
+            if (currentCameraPositionIndex < 0) currentCameraPositionIndex += totalPositions;
+
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Cycling camera to position {currentCameraPositionIndex + 1}/{totalPositions}");
+            
+            camera.MoveCamera(room, currentCameraPositionIndex);
+            
+            // Update target position so we don't drift back if transitioning
+            // And update start position to avoid jumps
+            targetPosition = camera.pos;
+            startPosition = camera.pos;
+            
+            Hud?.RegisterUserActivity();
+        }
 
         /// <summary>
         /// Select camera position based on current camera mode

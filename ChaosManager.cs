@@ -84,8 +84,8 @@ namespace RainWorldWallpaperMod
             { "Scavenger", 3 },
             { "ScavengerElite", 3 },
 
-            // Weight 3 - Slugpups (Standard Spawn Rate)
-            { "SlugNPC", 3 },
+            // Weight 1 - Slugpups (Very Frequent Spawn Rate)
+            { "SlugNPC", 1 },
 
             // Weight 4 - Dangerous/Aggressive
             { "RedLizard", 4 }, { "CyanLizard", 4 },

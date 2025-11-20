@@ -250,7 +250,7 @@ namespace RainWorldWallpaperMod
                 regionTimeLabel.text = $"Rain-based regions: Waiting for rain... | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
             }
 
-            controlHintLabel.text = "Controls: Right Arrow/Dpad -> Next | N Next Room | G Next Region | B Prev Region | F1/Tab Settings";
+            controlHintLabel.text = "Controls: Right/D Next | Left/A Prev | Up/Down Cam | L Lock | F1/Tab Settings";
         }
 
         private string GetRegionName(string regionCode)

@@ -91,7 +91,7 @@ namespace RainWorldWallpaperMod
             roomLabel = CreateLabel(100f, 120f, string.Empty);
             lockLabel = CreateLabel(100f, 90f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 60f, "Up/Down -> select | Left/Right -> cycle | L -> toggle lock | Enter/G -> travel");
+            travelInstructions = CreateLabel(100f, 60f, "Right/D -> Next | Left/A -> Prev | Up/Down -> Cam | L -> Lock");
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
