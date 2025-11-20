@@ -57,7 +57,6 @@ namespace RainWorldWallpaperMod
         }
 
         // Configuration values
-        public readonly Configurable<float> RegionDuration;
         public readonly Configurable<float> TransitionDuration;
         public readonly Configurable<float> StayDuration;
         public readonly Configurable<float> HudFadeDelay;
@@ -66,11 +65,13 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<string> StartRegion;
         public readonly Configurable<string> SelectedCampaign;
         public readonly Configurable<string> CameraModeConfig;
+        public readonly Configurable<bool> EnableChaos;
+        public readonly Configurable<int> ChaosLevel;
+        public readonly Configurable<bool> ChaosSpawnAll;
 
         public WallpaperModOptions()
         {
             // Bind configuration values with defaults (using strings for enums to work with OpResourceSelector)
-            RegionDuration = config.Bind("regionDuration", 300f);
             TransitionDuration = config.Bind("transitionDuration", 5f);
             StayDuration = config.Bind("stayDuration", 15f);
             HudFadeDelay = config.Bind("hudFadeDelay", 3f);
@@ -79,6 +80,9 @@ namespace RainWorldWallpaperMod
             StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
             SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
             CameraModeConfig = config.Bind("cameraMode", CameraMode.RandomExploration.ToString());
+            EnableChaos = config.Bind("enableChaos", false);
+            ChaosLevel = config.Bind("chaosLevel", 1);
+            ChaosSpawnAll = config.Bind("chaosSpawnAll", false);
         }
 
         public override void Initialize()
@@ -111,13 +115,6 @@ namespace RainWorldWallpaperMod
                 // Campaign Selection label (dropdown added later)
                 float campaignYPos = leftYPos;
                 uiElements.Add(new OpLabel(leftColumnLabel, campaignYPos, "Campaign:"));
-                leftYPos -= lineHeight;
-
-                // Region Duration
-                OpTextBox regionDurationBox = new OpTextBox(RegionDuration, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                regionDurationBox.description = "Duration in seconds to spend in each region (60-1800)";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Region (sec):"));
-                uiElements.Add(regionDurationBox);
                 leftYPos -= lineHeight;
 
                 // Room Stay Duration
@@ -165,6 +162,27 @@ namespace RainWorldWallpaperMod
                 hudFadeDelayBox.description = "Delay in seconds before HUD fades out (1-10)";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "HUD Fade (sec):"));
                 uiElements.Add(hudFadeDelayBox);
+                rightYPos -= lineHeight;
+
+                // Enable Chaos
+                OpCheckBox enableChaosBox = new OpCheckBox(EnableChaos, new Vector2(rightColumnControl, rightYPos));
+                enableChaosBox.description = "If enabled, spawns creatures to create a more lively environment (may cause instability)";
+                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "Chaos Mode:"));
+                uiElements.Add(enableChaosBox);
+                rightYPos -= lineHeight;
+
+                // Chaos Level (1-10)
+                OpTextBox chaosLevelBox = new OpTextBox(ChaosLevel, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
+                chaosLevelBox.description = "Chaos intensity: 1 = Controlled (50 max), 10 = ABSOLUTE CHAOS (250 max)";
+                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Chaos Level:"));
+                uiElements.Add(chaosLevelBox);
+                rightYPos -= lineHeight;
+
+                // Chaos Spawn All
+                OpCheckBox chaosSpawnAllBox = new OpCheckBox(ChaosSpawnAll, new Vector2(rightColumnControl, rightYPos));
+                chaosSpawnAllBox.description = "⚠️ EXPERIMENTAL: Spawn ALL creature types, ignoring blacklist (may crash!)";
+                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "Spawn All:"));
+                uiElements.Add(chaosSpawnAllBox);
 
                 // === BOTTOM SECTION (full width) ===
                 float bottomYPos = Mathf.Min(leftYPos, rightYPos) - lineHeight * 0.5f;
@@ -283,12 +301,6 @@ namespace RainWorldWallpaperMod
             base.Update();
 
             // Clamp values to valid ranges
-            float regionDuration = RegionDuration.Value;
-            if (regionDuration < 60f)
-                RegionDuration.Value = 60f;
-            else if (regionDuration > 1800f)
-                RegionDuration.Value = 1800f;
-
             float transitionDuration = TransitionDuration.Value;
             if (transitionDuration < 1f)
                 TransitionDuration.Value = 1f;
@@ -306,6 +318,12 @@ namespace RainWorldWallpaperMod
                 HudFadeDelay.Value = 1f;
             else if (hudFadeDelay > 10f)
                 HudFadeDelay.Value = 10f;
+
+            int chaosLevel = ChaosLevel.Value;
+            if (chaosLevel < 1)
+                ChaosLevel.Value = 1;
+            else if (chaosLevel > 10)
+                ChaosLevel.Value = 10;
         }
 
         // Helper method to convert campaign string to SlugcatStats.Name

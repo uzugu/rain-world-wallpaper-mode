@@ -143,6 +143,51 @@ namespace RainWorldWallpaperMod
             return visitedRegions?.Count ?? 0;
         }
 
+        /// <summary>
+        /// Returns a random unvisited region, or null if all regions have been visited
+        /// </summary>
+        public string GetRandomUnvisitedRegion()
+        {
+            if (regionOrder == null || regionOrder.Count == 0)
+            {
+                return null;
+            }
+
+            var unvisitedRegions = regionOrder.Where(r => !visitedRegions.Contains(r)).ToList();
+
+            if (unvisitedRegions.Count == 0)
+            {
+                return null; // All regions visited
+            }
+
+            // Select random unvisited region
+            int randomIndex = UnityEngine.Random.Range(0, unvisitedRegions.Count);
+            return unvisitedRegions[randomIndex];
+        }
+
+        /// <summary>
+        /// Checks if all regions in the current campaign have been visited
+        /// </summary>
+        public bool AreAllRegionsVisited()
+        {
+            if (regionOrder == null || regionOrder.Count == 0)
+            {
+                return true;
+            }
+
+            return visitedRegions.Count >= regionOrder.Count;
+        }
+
+        /// <summary>
+        /// Called when campaign changes - clears visited regions to start fresh
+        /// </summary>
+        public void OnCampaignChange()
+        {
+            visitedRegions.Clear();
+            roomsExploredInRegion = 0;
+            WallpaperMod.Log?.LogInfo("RegionManager: Campaign changed, cleared visited regions");
+        }
+
         public void Cleanup()
         {
             // Cleanup if needed
@@ -198,7 +243,7 @@ namespace RainWorldWallpaperMod
             return regionOrder;
         }
 
-        private void SetCurrentRegion(string regionCode)
+        public void SetCurrentRegion(string regionCode)
         {
             currentRegion = regionCode.ToUpperInvariant();
             roomsExploredInRegion = 0;

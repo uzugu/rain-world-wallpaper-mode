@@ -168,7 +168,14 @@ namespace RainWorldWallpaperMod
         {
             if (activeController != null)
             {
-                // Block slugcat updates entirely during wallpaper mode
+                // Allow SlugNPCs / Pups to update so they can move and exist
+                if (self.isNPC || self.playerState.isPup || self.Template.type.ToString() == "SlugNPC")
+                {
+                     orig(self, eu);
+                     return;
+                }
+
+                // Block player-controlled slugcat updates entirely during wallpaper mode
                 return;
             }
 
@@ -187,6 +194,58 @@ namespace RainWorldWallpaperMod
             }
 
             orig(self);
+        }
+
+        /// <summary>
+        /// Advances to the next campaign in the list and triggers world reload
+        /// Called when all regions in current campaign have been explored
+        /// </summary>
+        public void AdvanceToNextCampaign()
+        {
+            if (Options == null)
+            {
+                Log?.LogWarning("AdvanceToNextCampaign: Options is null, cannot cycle campaigns");
+                return;
+            }
+
+            // Get all campaign choices (from enum)
+            var allCampaigns = new List<string>
+            {
+                "White", "Yellow", "Red",           // Vanilla
+                "Gourmand", "Artificer", "Rivulet", // Downpour
+                "Spearmaster", "Saint"              // Downpour
+            };
+
+            string currentCampaign = Options.SelectedCampaign.Value;
+            int currentIndex = allCampaigns.IndexOf(currentCampaign);
+
+            if (currentIndex < 0)
+            {
+                currentIndex = 0; // Default to first if not found
+            }
+
+            // Advance to next campaign (wraps around)
+            int nextIndex = (currentIndex + 1) % allCampaigns.Count;
+            string nextCampaign = allCampaigns[nextIndex];
+
+            Log?.LogInfo($"AdvanceToNextCampaign: {currentCampaign} -> {nextCampaign}");
+
+            // Update config
+            Options.SelectedCampaign.Value = nextCampaign;
+
+            // Notify RegionManager that campaign changed (clears visited regions)
+            activeController?.RegionManager?.OnCampaignChange();
+
+            // Get a starting region for the new campaign (use first vanilla region)
+            string startRegion = "SU"; // Default to Outskirts
+
+            Log?.LogInfo($"Starting new campaign '{nextCampaign}' in region '{startRegion}'");
+
+            // Trigger world reload with new campaign and region
+            if (activeController?.Game?.manager != null)
+            {
+                QueueRegionReload(activeController.Game.manager, startRegion);
+            }
         }
 
         public void OnDisable()

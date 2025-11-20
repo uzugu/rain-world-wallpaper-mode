@@ -239,11 +239,18 @@ namespace RainWorldWallpaperMod
                 nextRegionLabel.text = "Next Region: [Pending]";
             }
 
-            float elapsed = Mathf.Clamp(controller.RegionTimerSeconds, 0f, Mathf.Max(controller.RegionDurationSeconds, 0.01f));
-            float total = Mathf.Max(controller.RegionDurationSeconds, 0.01f);
-            regionTimeLabel.text = $"Region Time: {FormatTime(elapsed)} / {FormatTime(total)} | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
+            // Display rain countdown status
+            if (controller.IsRainCountdownActive)
+            {
+                float remaining = controller.RainCountdownRemaining;
+                regionTimeLabel.text = $"Rain Countdown: {FormatTime(remaining)} until region change | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
+            }
+            else
+            {
+                regionTimeLabel.text = $"Rain-based regions: Waiting for rain... | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
+            }
 
-            controlHintLabel.text = "Controls: Right Arrow/Dpad -> Next | N Next Room | G Next Region | B Prev Region | plus/minus or PgUp/PgDn Duration | F1/Tab Settings";
+            controlHintLabel.text = "Controls: Right Arrow/Dpad -> Next | N Next Room | G Next Region | B Prev Region | F1/Tab Settings";
         }
 
         private string GetRegionName(string regionCode)

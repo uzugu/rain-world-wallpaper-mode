@@ -14,6 +14,7 @@ namespace RainWorldWallpaperMod
         public WallpaperHUD Hud { get; private set; }
         public RainWorldGame Game { get; }
         public EchoMusicManager EchoMusic { get; private set; }
+        public ChaosManager ChaosManager { get; private set; }
 
         // Transition settings
         private float transitionDuration = 5f;
@@ -21,12 +22,14 @@ namespace RainWorldWallpaperMod
         private float currentTimer = 0f;
         private bool isTransitioning = false;
 
-        // Region timing
-        private float regionDurationSeconds = 300f;
-        private float regionTimerSeconds = 0f;
-        private const float REGION_DURATION_MIN = 60f;
-        private const float REGION_DURATION_MAX = 1800f;
-        private const float REGION_DURATION_STEP = 60f;
+        // Rain-triggered region changes
+        private bool hasTriggeredRainCountdown = false; // Track if we've already started countdown this cycle
+        private bool isRainCountdownActive = false;
+        private float rainCountdownTimer = 0f;
+        private float rainCountdownDuration = 120f; // Will be randomized when rain starts
+        private const float CYCLE_COMPLETION_THRESHOLD = 0.85f; // Start countdown when 85% through the cycle
+        private const float RAIN_COUNTDOWN_MIN = 60f;   // 1 minute min
+        private const float RAIN_COUNTDOWN_MAX = 180f;  // 3 minutes max
 
         // Camera interpolation
         private Vector2 startPosition;
@@ -82,8 +85,6 @@ namespace RainWorldWallpaperMod
         private bool lastLeftArrowButton;
         private bool lastRightArrowButton;
         private bool lastEnterButton;
-        private bool lastPlusButton;
-        private bool lastMinusButton;
         private bool lastLockButton;
 
         public WallpaperController(RainWorldGame game, string startRegion)
@@ -93,14 +94,21 @@ namespace RainWorldWallpaperMod
             currentRegionCode = startRegion;
             RegionManager = new RegionManager(this, startRegion);
             EchoMusic = new EchoMusicManager(game);
+            ChaosManager = new ChaosManager(game, this);
 
             // Load settings from config
             if (WallpaperMod.Options != null)
             {
                 transitionDuration = WallpaperMod.Options.TransitionDuration.Value;
                 stayDuration = WallpaperMod.Options.StayDuration.Value;
-                regionDurationSeconds = WallpaperMod.Options.RegionDuration.Value;
                 cameraMode = WallpaperModOptions.GetCameraMode(WallpaperMod.Options.CameraModeConfig.Value);
+
+                // Initialize chaos if enabled
+                if (WallpaperMod.Options.EnableChaos.Value)
+                {
+                    int chaosLevel = WallpaperMod.Options.ChaosLevel.Value;
+                    ChaosManager.EnableChaos(chaosLevel);
+                }
             }
 
             WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (start region: {currentRegionCode}, camera mode: {cameraMode})");
@@ -152,13 +160,9 @@ namespace RainWorldWallpaperMod
             HandleInput();
 
             currentTimer += dt;
-            regionTimerSeconds += dt;
 
-            if (regionTimerSeconds >= regionDurationSeconds)
-            {
-                regionTimerSeconds = 0f;
-                RegionManager?.AdvanceToNextRegion();
-            }
+            // Rain-based region changing
+            HandleRainDetection(dt);
 
             // Only auto-transition if not locked
             if (!isTransitioning && currentTimer >= stayDuration && !isRoomLocked)
@@ -171,6 +175,7 @@ namespace RainWorldWallpaperMod
             }
 
             EchoMusic?.Update();
+            ChaosManager?.Update(dt);
 
             Hud?.Update();
         }
@@ -208,6 +213,7 @@ namespace RainWorldWallpaperMod
             Hud?.Destroy();
             RegionManager?.Cleanup();
             EchoMusic?.Shutdown();
+            ChaosManager?.Shutdown();
             settingsOverlay?.Destroy();
             settingsOverlay = null;
             hasInitializedSettingsOverlay = false;
@@ -252,6 +258,112 @@ namespace RainWorldWallpaperMod
             lastToggleOverlayButton = toggleOverlayButton;
         }
 
+        /// <summary>
+        /// Resets rain tracking state when entering a new region
+        /// </summary>
+        private void ResetRainTracking()
+        {
+            hasTriggeredRainCountdown = false;
+            isRainCountdownActive = false;
+            rainCountdownTimer = 0f;
+
+            if (Game?.world?.rainCycle != null)
+            {
+                int timer = Game.world.rainCycle.timer;
+                int cycleLength = Game.world.rainCycle.cycleLength;
+                float cycleProgress = cycleLength > 0 ? (float)timer / cycleLength : 0f;
+
+                WallpaperMod.Log?.LogInfo($"Rain tracking reset for new region (cycle: {timer}/{cycleLength}, progress: {cycleProgress:P0})");
+
+                // If we're already past the threshold when entering, start countdown immediately
+                if (cycleProgress >= CYCLE_COMPLETION_THRESHOLD)
+                {
+                    rainCountdownDuration = RAIN_COUNTDOWN_MIN + (float)(random.NextDouble() * (RAIN_COUNTDOWN_MAX - RAIN_COUNTDOWN_MIN));
+                    rainCountdownTimer = 0f;
+                    isRainCountdownActive = true;
+                    hasTriggeredRainCountdown = true;
+                    WallpaperMod.Log?.LogInfo($"Cycle already {cycleProgress:P0} complete! Starting countdown: {rainCountdownDuration:F1}s");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Monitors rain cycle timer and triggers region change when day is ending
+        /// </summary>
+        private void HandleRainDetection(float dt)
+        {
+            if (Game?.world?.rainCycle == null)
+            {
+                return;
+            }
+
+            int timer = Game.world.rainCycle.timer;
+            int cycleLength = Game.world.rainCycle.cycleLength;
+
+            if (cycleLength <= 0)
+            {
+                return; // Invalid cycle length
+            }
+
+            float cycleProgress = (float)timer / cycleLength;
+
+            // Debug: Log cycle progress every 5 seconds
+            if (Time.frameCount % 300 == 0) // ~5 seconds at 60fps
+            {
+                WallpaperMod.Log?.LogInfo($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CYCLE_COMPLETION_THRESHOLD:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}");
+            }
+
+            // Start countdown when cycle reaches threshold (85% complete)
+            if (!hasTriggeredRainCountdown && cycleProgress >= CYCLE_COMPLETION_THRESHOLD)
+            {
+                // Day is ending! Start random countdown
+                rainCountdownDuration = RAIN_COUNTDOWN_MIN + (float)(random.NextDouble() * (RAIN_COUNTDOWN_MAX - RAIN_COUNTDOWN_MIN));
+                rainCountdownTimer = 0f;
+                isRainCountdownActive = true;
+                hasTriggeredRainCountdown = true;
+
+                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s");
+            }
+
+            // Update countdown if active
+            if (isRainCountdownActive)
+            {
+                rainCountdownTimer += dt;
+
+                if (rainCountdownTimer >= rainCountdownDuration)
+                {
+                    // Countdown complete - change region!
+                    OnRainRegionChange();
+                    isRainCountdownActive = false;
+                    rainCountdownTimer = 0f;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Triggered when rain countdown completes - changes to a random unvisited region
+        /// or cycles to next campaign if all regions visited
+        /// </summary>
+        private void OnRainRegionChange()
+        {
+            WallpaperMod.Log?.LogInfo("Rain World Wallpaper Mode] Rain countdown complete, changing region...");
+
+            string nextRegion = RegionManager?.GetRandomUnvisitedRegion();
+
+            if (nextRegion != null)
+            {
+                // Found an unvisited region in current campaign
+                WallpaperMod.Log?.LogInfo($"Rain World Wallpaper Mode] Switching to unvisited region: {nextRegion}");
+                RegionManager?.SetCurrentRegion(nextRegion);
+            }
+            else
+            {
+                // All regions visited - cycle to next campaign
+                WallpaperMod.Log?.LogInfo("Rain World Wallpaper Mode] All regions explored, cycling to next campaign...");
+                WallpaperMod.Instance?.AdvanceToNextCampaign();
+            }
+        }
+
         private void HandleInput()
         {
             bool anyKeyPressed = Input.anyKeyDown
@@ -268,11 +380,6 @@ namespace RainWorldWallpaperMod
             // which runs before any early returns in Update()
 
             bool settingsActive = settingsMenuVisible && settingsOverlay != null && settingsOverlay.IsVisible;
-            float baseStep = REGION_DURATION_STEP;
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-            {
-                baseStep *= 5f;
-            }
 
             if (settingsActive)
             {
@@ -411,7 +518,6 @@ namespace RainWorldWallpaperMod
             if (regionForwardButton && !lastRegionForwardButton && !preparingWorldReload)
             {
                 Hud?.RegisterUserActivity();
-                regionTimerSeconds = 0f;
                 RegionManager?.AdvanceToNextRegion();
             }
             lastRegionForwardButton = regionForwardButton;
@@ -421,26 +527,9 @@ namespace RainWorldWallpaperMod
             if (regionBackButton && !lastRegionBackButton && !preparingWorldReload)
             {
                 Hud?.RegisterUserActivity();
-                regionTimerSeconds = 0f;
                 RegionManager?.AdvanceToPreviousRegion();
             }
             lastRegionBackButton = regionBackButton;
-
-            // +/= or PageUp - increase region duration
-            bool plusButton = Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus) || Input.GetKey(KeyCode.PageUp);
-            if (plusButton && !lastPlusButton)
-            {
-                AdjustRegionDuration(baseStep);
-            }
-            lastPlusButton = plusButton;
-
-            // - or PageDown - decrease region duration
-            bool minusButton = Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus) || Input.GetKey(KeyCode.PageDown);
-            if (minusButton && !lastMinusButton)
-            {
-                AdjustRegionDuration(-baseStep);
-            }
-            lastMinusButton = minusButton;
 
             // L key - toggle room lock
             bool lockButton = Input.GetKey(KeyCode.L);
@@ -474,6 +563,7 @@ namespace RainWorldWallpaperMod
 
             // Periodically check for and remove player entities
             // Players can spawn at any time, so we check continuously but not every frame
+            // IMPORTANT: Don't remove slugpups (NPCs) - they're spawned by ChaosManager!
             playerCheckCounter++;
             if (playerCheckCounter >= PLAYER_CHECK_INTERVAL)
             {
@@ -481,16 +571,47 @@ namespace RainWorldWallpaperMod
 
                 if (Game.Players != null && Game.Players.Count > 0)
                 {
-                    WallpaperMod.Log?.LogDebug($"WallpaperController: Removing {Game.Players.Count} player(s)");
+                    var playersToRemove = new System.Collections.Generic.List<AbstractCreature>();
+
+                    // WallpaperMod.Log?.LogInfo($"WallpaperController: Checking {Game.Players.Count} player(s)");
+
                     foreach (var abstractPlayer in Game.Players)
                     {
-                        if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
+                        if (abstractPlayer?.state is PlayerState playerState)
                         {
-                            realizedPlayer.RemoveFromRoom();
-                            realizedPlayer.Destroy();
+
+                            // Don't remove slugpups (NPCs) - they're spawned by ChaosManager
+                            // Check both isPup flag AND explicit creature type "SlugNPC"
+                            if (playerState.isPup || abstractPlayer.creatureTemplate.type.ToString() == "SlugNPC")
+                            {
+                                // WallpaperMod.Log?.LogInfo($"  -> Keeping slugpup/SlugNPC!");
+                                continue; // Skip slugpups
+                            }
+                        }
+                        else
+                        {
+                            // WallpaperMod.Log?.LogWarning($"  Player has no PlayerState or wrong state type: {abstractPlayer?.state?.GetType().Name}");
+                        }
+
+                        // Remove actual player slugcats
+                        // WallpaperMod.Log?.LogInfo($"  -> Marking for removal. Type: {abstractPlayer.creatureTemplate.type.ToString()}");
+                        playersToRemove.Add(abstractPlayer);
+                    }
+
+                    if (playersToRemove.Count > 0)
+                    {
+                        // WallpaperMod.Log?.LogInfo($"WallpaperController: Removing {playersToRemove.Count} actual player(s), keeping {Game.Players.Count - playersToRemove.Count} slugpups");
+                        foreach (var abstractPlayer in playersToRemove)
+                        {
+                            // WallpaperMod.Log?.LogInfo($"  REMOVING: {abstractPlayer.ID} Type: {abstractPlayer.creatureTemplate.type.ToString()}");
+                            if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
+                            {
+                                realizedPlayer.RemoveFromRoom();
+                                realizedPlayer.Destroy();
+                            }
+                            Game.Players.Remove(abstractPlayer);
                         }
                     }
-                    Game.Players.Clear();
                 }
             }
 
@@ -510,9 +631,11 @@ namespace RainWorldWallpaperMod
             // Temporarily disabled to test natural echo spawning
             // EnableEchoSpawning();
 
+            // Reset rain tracking for initial region load
+            ResetRainTracking();
+
             spectatorPrepared = true;
             currentTimer = stayDuration;
-            regionTimerSeconds = 0f;
             preparingWorldReload = false;
         }
 
@@ -857,7 +980,6 @@ namespace RainWorldWallpaperMod
             }
 
             currentRegionCode = regionCode;
-            regionTimerSeconds = 0f;
 
             if (!spectatorPrepared || Game.world == null)
             {
@@ -877,6 +999,10 @@ namespace RainWorldWallpaperMod
             else
             {
                 currentTimer = stayDuration;
+                // Reset rain tracking for new region
+                ResetRainTracking();
+                // Notify chaos manager of region change (even if staying in same region)
+                ChaosManager?.OnRegionChanged();
             }
         }
 
@@ -897,6 +1023,9 @@ namespace RainWorldWallpaperMod
             settingsMenuVisible = false;
             axisSkipActive = false;
             playerCheckCounter = 0; // Reset player check counter for new region
+
+            // Cleanup chaos manager for region reload
+            ChaosManager?.Shutdown();
         }
 
         private void ForceImmediateLocationChange()
@@ -928,27 +1057,6 @@ namespace RainWorldWallpaperMod
             }
         }
 
-        private void AdjustRegionDuration(float deltaSeconds)
-        {
-            float newDuration = Mathf.Clamp(regionDurationSeconds + deltaSeconds, REGION_DURATION_MIN, REGION_DURATION_MAX);
-            if (Mathf.Approximately(newDuration, regionDurationSeconds))
-            {
-                return;
-            }
-
-            regionDurationSeconds = newDuration;
-            regionTimerSeconds = Mathf.Min(regionTimerSeconds, regionDurationSeconds);
-
-            // Save to config
-            if (WallpaperMod.Options != null)
-            {
-                WallpaperMod.Options.RegionDuration.Value = regionDurationSeconds;
-            }
-
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Region duration set to {regionDurationSeconds / 60f:F1} minutes");
-            Hud?.RegisterUserActivity();
-            settingsOverlay?.Refresh();
-        }
 
         private void ToggleSettingsMenu()
         {
@@ -990,9 +1098,15 @@ namespace RainWorldWallpaperMod
 
         public string PreviousRegionCode => RegionManager?.GetPreviousRegion() ?? string.Empty;
 
-        public float RegionTimerSeconds => regionTimerSeconds;
+        /// <summary>
+        /// Rain countdown timer - shows remaining seconds until region change (0 if not active)
+        /// </summary>
+        public float RainCountdownRemaining => isRainCountdownActive ? (rainCountdownDuration - rainCountdownTimer) : 0f;
 
-        public float RegionDurationSeconds => regionDurationSeconds;
+        /// <summary>
+        /// Whether rain countdown is currently active
+        /// </summary>
+        public bool IsRainCountdownActive => isRainCountdownActive;
 
         public bool IsTransitioning => isTransitioning;
 

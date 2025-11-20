@@ -14,6 +14,10 @@ namespace RainWorldWallpaperMod
         private readonly FLabel titleLabel;
         private readonly FLabel durationLabel;
         private readonly FLabel hudModeLabel;
+        private readonly FLabel chaosLabel;
+        private readonly FLabel chaosLevelLabel;
+        private readonly FLabel chaosSpawnAllLabel;
+        private readonly FLabel chaosWarningLabel;
         private readonly FLabel instructionsLabel;
         private readonly FLabel closeLabel;
 
@@ -35,7 +39,7 @@ namespace RainWorldWallpaperMod
         private int selectedCameraModeIndex;
         private int selectedRoomIndex;
 
-        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock
+        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock, 5 = chaos mode, 6 = chaos level, 7 = chaos spawn all
         private int currentFocus = 0;
 
         private bool isVisible;
@@ -60,32 +64,44 @@ namespace RainWorldWallpaperMod
 
             durationLabel = CreateLabel(100f, 490f, string.Empty);
             hudModeLabel = CreateLabel(100f, 460f, string.Empty);
-            instructionsLabel = CreateLabel(100f, 420f, "Left/Right -> adjust +/- 1 min | Shift+Left/Right -> adjust +/- 5 min | H -> toggle HUD");
+
+            chaosLabel = CreateLabel(100f, 430f, string.Empty);
+            chaosLevelLabel = CreateLabel(100f, 400f, string.Empty);
+            chaosSpawnAllLabel = CreateLabel(100f, 370f, string.Empty);
+            chaosWarningLabel = CreateLabel(100f, 340f, "⚠️ Chaos changes apply on next region");
+            chaosWarningLabel.scale = 0.85f;
+            chaosWarningLabel.color = new Color(1f, 0.7f, 0f, 0.85f);
+
+            instructionsLabel = CreateLabel(100f, 310f, "H -> toggle HUD | Regions change automatically when rain starts");
             instructionsLabel.scale = 0.9f;
             instructionsLabel.color = new Color(0.7f, 0.85f, 1f, 0.85f);
 
-            closeLabel = CreateLabel(100f, 390f, "Press F1 or Tab to close");
+            closeLabel = CreateLabel(100f, 280f, "Press F1 or Tab to close");
             closeLabel.scale = 0.9f;
             closeLabel.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
             // Quick travel UI
-            quickTravelTitle = CreateLabel(100f, 350f, "=== Quick Travel ===");
+            quickTravelTitle = CreateLabel(100f, 240f, "=== Quick Travel ===");
             quickTravelTitle.scale = 1.1f;
             quickTravelTitle.color = new Color(1f, 0.85f, 0f, 1f);
 
-            campaignLabel = CreateLabel(100f, 320f, string.Empty);
-            regionLabel = CreateLabel(100f, 290f, string.Empty);
-            cameraModeLabel = CreateLabel(100f, 260f, string.Empty);
-            roomLabel = CreateLabel(100f, 230f, string.Empty);
-            lockLabel = CreateLabel(100f, 200f, string.Empty);
+            campaignLabel = CreateLabel(100f, 210f, string.Empty);
+            regionLabel = CreateLabel(100f, 180f, string.Empty);
+            cameraModeLabel = CreateLabel(100f, 150f, string.Empty);
+            roomLabel = CreateLabel(100f, 120f, string.Empty);
+            lockLabel = CreateLabel(100f, 90f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 170f, "Up/Down -> select | Left/Right -> cycle | L -> toggle lock | Enter/G -> travel");
+            travelInstructions = CreateLabel(100f, 60f, "Up/Down -> select | Left/Right -> cycle | L -> toggle lock | Enter/G -> travel");
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
             container.AddChild(titleLabel);
             container.AddChild(durationLabel);
             container.AddChild(hudModeLabel);
+            container.AddChild(chaosLabel);
+            container.AddChild(chaosLevelLabel);
+            container.AddChild(chaosSpawnAllLabel);
+            container.AddChild(chaosWarningLabel);
             container.AddChild(instructionsLabel);
             container.AddChild(closeLabel);
             container.AddChild(quickTravelTitle);
@@ -131,14 +147,51 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            float minutes = controller.RegionDurationSeconds / 60f;
-            durationLabel.text = $"Region Duration: {minutes:F1} minutes";
+            // Display rain countdown status
+            if (controller.IsRainCountdownActive)
+            {
+                float remainingSeconds = controller.RainCountdownRemaining;
+                int minutes = (int)(remainingSeconds / 60f);
+                int seconds = (int)(remainingSeconds % 60f);
+                durationLabel.text = $"Rain Countdown: {minutes}m {seconds}s until region change";
+            }
+            else
+            {
+                durationLabel.text = "Rain-based region changes: Waiting for rain...";
+            }
 
             bool hudAlwaysVisible = controller.Hud?.AlwaysShowHUD ?? false;
             hudModeLabel.text = $"HUD Always Visible: {(hudAlwaysVisible ? "ON" : "OFF")} (press H to toggle)";
 
+            // Update chaos labels
+            RefreshChaosLabels();
+
             // Update quick travel labels
             RefreshQuickTravelLabels();
+        }
+
+        private void RefreshChaosLabels()
+        {
+            bool chaosEnabled = WallpaperMod.Options?.EnableChaos.Value ?? false;
+            int chaosLevel = WallpaperMod.Options?.ChaosLevel.Value ?? 1;
+            bool chaosSpawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
+
+            bool isFocusedMode = currentFocus == 5;
+            bool isFocusedLevel = currentFocus == 6;
+            bool isFocusedSpawnAll = currentFocus == 7;
+
+            string modePrefix = isFocusedMode ? ">> " : "   ";
+            string levelPrefix = isFocusedLevel ? ">> " : "   ";
+            string spawnAllPrefix = isFocusedSpawnAll ? ">> " : "   ";
+
+            chaosLabel.text = $"{modePrefix}Chaos Mode: [{(chaosEnabled ? "ON" : "OFF")}]";
+            chaosLabel.color = isFocusedMode ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
+
+            chaosLevelLabel.text = $"{levelPrefix}Chaos Level: < {chaosLevel} >";
+            chaosLevelLabel.color = isFocusedLevel ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
+
+            chaosSpawnAllLabel.text = $"{spawnAllPrefix}Spawn ALL: [{(chaosSpawnAll ? "ON" : "OFF")}] (experimental!)";
+            chaosSpawnAllLabel.color = isFocusedSpawnAll ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
         }
 
         private void RefreshQuickTravelLabels()
@@ -295,8 +348,9 @@ namespace RainWorldWallpaperMod
 
         public void CycleFocus(int direction)
         {
-            currentFocus = (currentFocus + direction + 5) % 5;
+            currentFocus = (currentFocus + direction + 8) % 8;
             RefreshQuickTravelLabels();
+            RefreshChaosLabels();
         }
 
         public void CycleCurrentSelection(int direction)
@@ -327,6 +381,40 @@ namespace RainWorldWallpaperMod
                 // Lock is toggled, not cycled
                 controller?.ToggleRoomLock();
                 RefreshQuickTravelLabels();
+            }
+            else if (currentFocus == 5)
+            {
+                // Chaos mode toggle
+                if (WallpaperMod.Options != null)
+                {
+                    WallpaperMod.Options.EnableChaos.Value = !WallpaperMod.Options.EnableChaos.Value;
+                    RefreshChaosLabels();
+                }
+            }
+            else if (currentFocus == 6)
+            {
+                // Chaos level cycling (1-10)
+                if (WallpaperMod.Options != null)
+                {
+                    int currentLevel = WallpaperMod.Options.ChaosLevel.Value;
+                    int newLevel = currentLevel + direction;
+
+                    // Wrap around between 1 and 10
+                    if (newLevel < 1) newLevel = 10;
+                    if (newLevel > 10) newLevel = 1;
+
+                    WallpaperMod.Options.ChaosLevel.Value = newLevel;
+                    RefreshChaosLabels();
+                }
+            }
+            else if (currentFocus == 7)
+            {
+                // Chaos spawn all toggle
+                if (WallpaperMod.Options != null)
+                {
+                    WallpaperMod.Options.ChaosSpawnAll.Value = !WallpaperMod.Options.ChaosSpawnAll.Value;
+                    RefreshChaosLabels();
+                }
             }
         }
 

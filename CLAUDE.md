@@ -6,6 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 We track work in Beads instead of Markdown. Run \`bd quickstart\` to see how.
 
+## Reference Projects
+
+**RainMeadow** - Located at `/mnt/c/Users/uzuik/Documents/VRmakes/Projects/RainMeadowReference`
+
+This is a comprehensive Rain World multiplayer mod that serves as an excellent reference for Rain World modding. When you need to understand how to use Rain World APIs, check this project for examples.
+
+Key reference files:
+- `Online/Resource/WorldSession.RainCycle.cs` - Shows RainCycle properties (timer, cycleLength, preTimer)
+- Various hooks and extensions throughout the codebase
+
+Important RainCycle API findings from RainMeadow:
+- `rainCycle.timer` - Current time in cycle (counts up from 0)
+- `rainCycle.cycleLength` - Total duration of the cycle in ticks
+- `rainCycle.preTimer` - Pre-timer value
+- When `timer >= cycleLength`, the day ends and rain arrives
+- `RainApproaching` is a normalized 0-1 value, but timer/cycleLength are the raw values
+
 ## Commit Guidelines
 
 When creating commits, follow these rules:
