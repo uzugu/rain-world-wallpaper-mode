@@ -30,7 +30,7 @@ Camera mode can be changed in the Remix menu or via the in-game settings overlay
 
 1. Ensure you have Rain World v1.9+ (Downpour) installed
 2. Install BepInEx if not already installed
-3. Copy the entire `mod` folder from `artifacts/bin/RainWorldWallpaperMod/Debug_AnyCPU/mod/` to `RainWorld_Data/StreamingAssets/mods/vrmakes.wallpapermod/`
+3. Copy the entire `mod` folder from `artifacts/bin/RainWorldWallpaperMod/Debug_AnyCPU/mod/` to `RainWorld_Data/StreamingAssets/mods/uzugu.wallpapermod/`
 4. Launch Rain World, open the Remix menu, enable “Rain World Wallpaper Mode”, and apply changes (a restart is required)
 
 ## Development

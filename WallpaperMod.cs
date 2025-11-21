@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.vrmakes.wallpapermod", "Rain World Wallpaper Mode", "1.0.4")]
+    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.0.0")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
@@ -111,8 +111,8 @@ namespace RainWorldWallpaperMod
                 }
 
                 // Register with Remix using underscore format for mod ID
-                MachineConnector.SetRegisteredOI("vrmakes_wallpapermod", Options);
-                Log?.LogInfo("Wallpaper Mod: Remix options registered with ID 'vrmakes_wallpapermod'");
+                MachineConnector.SetRegisteredOI("uzugu_wallpapermod", Options);
+                Log?.LogInfo("Wallpaper Mod: Remix options registered with ID 'uzugu_wallpapermod'");
             }
             catch (Exception ex)
             {

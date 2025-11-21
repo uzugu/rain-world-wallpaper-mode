@@ -98,7 +98,7 @@ To change these, edit the source code and rebuild.
 - Player control returns immediately
 
 ### "Mod doesn't appear in Remix"
-- Check installation: `E:\SteamLibrary\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\vrmakes.wallpapermod\`
+- Check installation: `E:\SteamLibrary\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\uzugu.wallpapermod\`
 - Verify `modinfo.json` exists
 - Verify `plugins/RainWorldWallpaperMod.dll` exists
 
@@ -138,8 +138,8 @@ You can adjust settings in the **Remix** menu or use the in-game **Overlay (F1/T
 
 ---
 
-**Mod ID**: `vrmakes.wallpapermod`
-**Version**: 1.1.0
+**Mod ID**: `uzugu.wallpapermod`
+**Version**: 1.0.0
 **Status**: ✅ Fully Functional with Navigation & Chaos
 
 Enjoy your Rain World wallpaper experience! 🌧️
