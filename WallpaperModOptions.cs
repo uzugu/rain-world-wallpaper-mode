@@ -192,9 +192,9 @@ namespace RainWorldWallpaperMod
                 bottomYPos -= 30f;
 
                 uiElements.Add(new OpLabelLong(new Vector2(leftColumnLabel, bottomYPos - 100f), new Vector2(500f, 100f),
-                    "N - Next Room | G - Next Region | B - Previous Region\n" +
-                    "+/- or PgUp/PgDn - Adjust Region Duration\n" +
-                    "H - Toggle HUD Always Visible\n" +
+                    "Right/D - Next Room | Left/A - Previous Room | Up/Down - Camera\\n" +
+                    "L - Lock Room | G - Next Region | B - Previous Region\\n" +
+                    "H - Toggle HUD Always Visible\\n" +
                     "F1/Tab - Settings Overlay | Escape - Return to Menu")
                 {
                     verticalAlignment = OpLabel.LabelVAlignment.Top,

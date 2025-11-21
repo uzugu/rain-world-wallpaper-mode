@@ -2,7 +2,7 @@
   "id": "uzugu_wallpapermod",
   "name": "Rain World Wallpaper Mode",
   "version": "1.0.0",
-  "target_game_version": "v1.9.15",
+  "target_game_version": "v1.11.3",
   "authors": "uzugu",
   "description": "Turns Rain World into a dynamic wallpaper with smooth transitions between random locations. Choose different slugcat campaigns and regions through the Remix menu!",
   "requirements": [],
