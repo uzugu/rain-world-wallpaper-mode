@@ -66,13 +66,7 @@ Two configuration surfaces are available:
 
 If you change dwell duration via keyboard controls or overlay, the HUD instantly reflects the new value.
 
-## Roadmap / TODO
 
-- [ ] Persist Remix configuration to disk and load on boot
-- [ ] Extend Remix UI with controller-friendly presets
-- [ ] Add optional fade overlays during region reloads
-- [ ] Expose camera path variants (pan/orbit/creature follow)
-- [ ] Provide hooks for custom region packs / community playlists
 
 ## License
 
