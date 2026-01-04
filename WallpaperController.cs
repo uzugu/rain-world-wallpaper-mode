@@ -28,6 +28,7 @@ namespace RainWorldWallpaperMod
         private float rainCountdownTimer = 0f;
         private float rainCountdownDuration = 120f; // Will be randomized when rain starts
         private const float CYCLE_COMPLETION_THRESHOLD = 0.85f; // Start countdown when 85% through the cycle
+        private const float NO_RAIN_THRESHOLD = 0.95f; // Instant transition when 95% through the cycle (no rain wait mode)
         private const float RAIN_COUNTDOWN_MIN = 60f;   // 1 minute min
         private const float RAIN_COUNTDOWN_MAX = 180f;  // 3 minutes max
 
@@ -178,6 +179,26 @@ namespace RainWorldWallpaperMod
             }
 
             EchoMusic?.Update();
+            
+            // Handle Chaos Mode toggling at runtime
+            if (WallpaperMod.Options != null && ChaosManager != null)
+            {
+                bool chaosEnabledInSettings = WallpaperMod.Options.EnableChaos.Value;
+                bool chaosCurrentlyActive = ChaosManager.IsEnabled;
+                
+                if (chaosEnabledInSettings && !chaosCurrentlyActive)
+                {
+                    // Enable chaos if setting is ON but manager is OFF
+                    int chaosLevel = WallpaperMod.Options.ChaosLevel.Value;
+                    ChaosManager.EnableChaos(chaosLevel);
+                }
+                else if (!chaosEnabledInSettings && chaosCurrentlyActive)
+                {
+                    // Disable chaos if setting is OFF but manager is ON
+                    ChaosManager.DisableChaos();
+                }
+            }
+            
             ChaosManager?.Update(dt);
 
             Hud?.Update();
@@ -309,23 +330,38 @@ namespace RainWorldWallpaperMod
             }
 
             float cycleProgress = (float)timer / cycleLength;
+            bool noRainWait = WallpaperMod.Options?.NoRainTransition.Value ?? false;
 
             // Debug: Log cycle progress every 5 seconds
             if (Time.frameCount % 300 == 0) // ~5 seconds at 60fps
             {
-                WallpaperMod.Log?.LogInfo($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CYCLE_COMPLETION_THRESHOLD:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}");
+                WallpaperMod.Log?.LogInfo($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CYCLE_COMPLETION_THRESHOLD:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}, noRainWait={noRainWait}");
             }
 
-            // Start countdown when cycle reaches threshold (85% complete)
+            // No Rain Wait mode: instant transition at 95%
+            if (noRainWait)
+            {
+                if (!hasTriggeredRainCountdown && cycleProgress >= NO_RAIN_THRESHOLD && !isRoomLocked)
+                {
+                    hasTriggeredRainCountdown = true;
+                    WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] No Rain Wait: Instant transition at {cycleProgress:P1}!");
+                    OnRainRegionChange();
+                }
+                return;
+            }
+
+            // Normal mode: Start countdown when cycle reaches threshold (85% complete)
             if (!hasTriggeredRainCountdown && cycleProgress >= CYCLE_COMPLETION_THRESHOLD)
             {
-                // Day is ending! Start random countdown
-                rainCountdownDuration = RAIN_COUNTDOWN_MIN + (float)(random.NextDouble() * (RAIN_COUNTDOWN_MAX - RAIN_COUNTDOWN_MIN));
+                // Day is ending! Start random countdown using config values
+                float minCountdown = WallpaperMod.Options?.RainCountdownMin.Value ?? RAIN_COUNTDOWN_MIN;
+                float maxCountdown = WallpaperMod.Options?.RainCountdownMax.Value ?? RAIN_COUNTDOWN_MAX;
+                rainCountdownDuration = minCountdown + (float)(random.NextDouble() * (maxCountdown - minCountdown));
                 rainCountdownTimer = 0f;
                 isRainCountdownActive = true;
                 hasTriggeredRainCountdown = true;
 
-                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s");
+                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s (range: {minCountdown}-{maxCountdown}s)");
             }
 
             // Update countdown if active
@@ -1133,6 +1169,25 @@ namespace RainWorldWallpaperMod
         /// Whether rain countdown is currently active
         /// </summary>
         public bool IsRainCountdownActive => isRainCountdownActive;
+
+        /// <summary>
+        /// Whether No Rain Wait mode is enabled
+        /// </summary>
+        public bool IsNoRainWaitMode => WallpaperMod.Options?.NoRainTransition.Value ?? false;
+
+        /// <summary>
+        /// Current rain cycle progress (0.0 to 1.0)
+        /// </summary>
+        public float CycleProgress
+        {
+            get
+            {
+                if (Game?.world?.rainCycle == null) return 0f;
+                int cycleLength = Game.world.rainCycle.cycleLength;
+                if (cycleLength <= 0) return 0f;
+                return (float)Game.world.rainCycle.timer / cycleLength;
+            }
+        }
 
         public bool IsTransitioning => isTransitioning;
 

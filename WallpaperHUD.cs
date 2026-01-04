@@ -240,7 +240,12 @@ namespace RainWorldWallpaperMod
             }
 
             // Display rain countdown status
-            if (controller.IsRainCountdownActive)
+            if (controller.IsNoRainWaitMode)
+            {
+                float progress = controller.CycleProgress * 100f;
+                regionTimeLabel.text = $"No Rain Wait: {progress:F0}% / 95% | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
+            }
+            else if (controller.IsRainCountdownActive)
             {
                 float remaining = controller.RainCountdownRemaining;
                 regionTimeLabel.text = $"Rain Countdown: {FormatTime(remaining)} until region change | Regions {controller.RegionsExplored}/{controller.TotalRegions}";

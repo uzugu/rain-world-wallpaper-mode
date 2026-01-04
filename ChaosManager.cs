@@ -13,7 +13,7 @@ namespace RainWorldWallpaperMod
         private readonly WallpaperController controller;
 
         // Chaos configuration
-        private int chaosLevel = 0; // 0 = disabled, 1-10 = intensity levels
+        private int chaosLevel = 0; // 0 = disabled,1-10 = intensity levels
         private bool chaosEnabled = false;
 
         // Spawning timing

@@ -68,6 +68,9 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<bool> EnableChaos;
         public readonly Configurable<int> ChaosLevel;
         public readonly Configurable<bool> ChaosSpawnAll;
+        public readonly Configurable<bool> NoRainTransition;
+        public readonly Configurable<int> RainCountdownMin;
+        public readonly Configurable<int> RainCountdownMax;
 
         public WallpaperModOptions()
         {
@@ -83,6 +86,9 @@ namespace RainWorldWallpaperMod
             EnableChaos = config.Bind("enableChaos", false);
             ChaosLevel = config.Bind("chaosLevel", 1);
             ChaosSpawnAll = config.Bind("chaosSpawnAll", false);
+            NoRainTransition = config.Bind("noRainTransition", false);
+            RainCountdownMin = config.Bind("rainCountdownMin", 60);
+            RainCountdownMax = config.Bind("rainCountdownMax", 180);
         }
 
         public override void Initialize()
@@ -141,6 +147,20 @@ namespace RainWorldWallpaperMod
                 // Camera Mode label (dropdown added later)
                 float cameraModeYPos = leftYPos;
                 uiElements.Add(new OpLabel(leftColumnLabel, cameraModeYPos, "Camera Mode:"));
+                leftYPos -= lineHeight;
+
+                // Rain Countdown Min
+                OpTextBox rainCountdownMinBox = new OpTextBox(RainCountdownMin, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
+                rainCountdownMinBox.description = "Minimum seconds for rain countdown before region change (10-300)";
+                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Min (sec):"));
+                uiElements.Add(rainCountdownMinBox);
+                leftYPos -= lineHeight;
+
+                // Rain Countdown Max
+                OpTextBox rainCountdownMaxBox = new OpTextBox(RainCountdownMax, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
+                rainCountdownMaxBox.description = "Maximum seconds for rain countdown before region change (30-600)";
+                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Max (sec):"));
+                uiElements.Add(rainCountdownMaxBox);
 
                 // === RIGHT COLUMN ===
                 float rightYPos = yPos;
@@ -183,6 +203,13 @@ namespace RainWorldWallpaperMod
                 chaosSpawnAllBox.description = "⚠️ EXPERIMENTAL: Spawn ALL creature types, ignoring blacklist (may crash!)";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "Spawn All:"));
                 uiElements.Add(chaosSpawnAllBox);
+                rightYPos -= lineHeight;
+
+                // No Rain Transition
+                OpCheckBox noRainTransitionBox = new OpCheckBox(NoRainTransition, new Vector2(rightColumnControl, rightYPos));
+                noRainTransitionBox.description = "Skip the rain countdown and transition to next region immediately at 95% cycle completion";
+                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "No Rain Wait:"));
+                uiElements.Add(noRainTransitionBox);
 
                 // === BOTTOM SECTION (full width) ===
                 float bottomYPos = Mathf.Min(leftYPos, rightYPos) - lineHeight * 0.5f;
@@ -324,6 +351,26 @@ namespace RainWorldWallpaperMod
                 ChaosLevel.Value = 1;
             else if (chaosLevel > 10)
                 ChaosLevel.Value = 10;
+
+            // Rain countdown range validation
+            int rainMin = RainCountdownMin.Value;
+            int rainMax = RainCountdownMax.Value;
+
+            // Clamp min to valid range (10-300)
+            if (rainMin < 10)
+                RainCountdownMin.Value = 10;
+            else if (rainMin > 300)
+                RainCountdownMin.Value = 300;
+
+            // Clamp max to valid range (30-600)
+            if (rainMax < 30)
+                RainCountdownMax.Value = 30;
+            else if (rainMax > 600)
+                RainCountdownMax.Value = 600;
+
+            // Ensure min <= max
+            if (RainCountdownMin.Value > RainCountdownMax.Value)
+                RainCountdownMin.Value = RainCountdownMax.Value;
         }
 
         // Helper method to convert campaign string to SlugcatStats.Name

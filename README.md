@@ -1,5 +1,7 @@
 # Rain World Wallpaper Mode
 
+![Rain World Wallpaper Mode Cover](cover.png)
+
 A Rain World mod that transforms the game into a dynamic wallpaper with smooth transitions between random locations.
 
 ## Features

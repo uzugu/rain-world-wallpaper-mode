@@ -17,6 +17,7 @@ namespace RainWorldWallpaperMod
         private readonly FLabel chaosLabel;
         private readonly FLabel chaosLevelLabel;
         private readonly FLabel chaosSpawnAllLabel;
+        private readonly FLabel noRainTransitionLabel;
         private readonly FLabel chaosWarningLabel;
         private readonly FLabel instructionsLabel;
         private readonly FLabel closeLabel;
@@ -39,7 +40,7 @@ namespace RainWorldWallpaperMod
         private int selectedCameraModeIndex;
         private int selectedRoomIndex;
 
-        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock, 5 = chaos mode, 6 = chaos level, 7 = chaos spawn all
+        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock, 5 = chaos mode, 6 = chaos level, 7 = chaos spawn all, 8 = no rain transition
         private int currentFocus = 0;
 
         private bool isVisible;
@@ -68,30 +69,31 @@ namespace RainWorldWallpaperMod
             chaosLabel = CreateLabel(100f, 430f, string.Empty);
             chaosLevelLabel = CreateLabel(100f, 400f, string.Empty);
             chaosSpawnAllLabel = CreateLabel(100f, 370f, string.Empty);
-            chaosWarningLabel = CreateLabel(100f, 340f, "⚠️ Chaos changes apply on next region");
+            noRainTransitionLabel = CreateLabel(100f, 340f, string.Empty);
+            chaosWarningLabel = CreateLabel(100f, 310f, "⚠️ Chaos changes apply on next region");
             chaosWarningLabel.scale = 0.85f;
             chaosWarningLabel.color = new Color(1f, 0.7f, 0f, 0.85f);
 
-            instructionsLabel = CreateLabel(100f, 310f, "H -> toggle HUD | Regions change automatically when rain starts");
+            instructionsLabel = CreateLabel(100f, 280f, "H -> toggle HUD | Regions change automatically when rain starts");
             instructionsLabel.scale = 0.9f;
             instructionsLabel.color = new Color(0.7f, 0.85f, 1f, 0.85f);
 
-            closeLabel = CreateLabel(100f, 280f, "Press F1 or Tab to close");
+            closeLabel = CreateLabel(100f, 250f, "Press F1 or Tab to close");
             closeLabel.scale = 0.9f;
             closeLabel.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
             // Quick travel UI
-            quickTravelTitle = CreateLabel(100f, 240f, "=== Quick Travel ===");
+            quickTravelTitle = CreateLabel(100f, 210f, "=== Quick Travel ===");
             quickTravelTitle.scale = 1.1f;
             quickTravelTitle.color = new Color(1f, 0.85f, 0f, 1f);
 
-            campaignLabel = CreateLabel(100f, 210f, string.Empty);
-            regionLabel = CreateLabel(100f, 180f, string.Empty);
-            cameraModeLabel = CreateLabel(100f, 150f, string.Empty);
-            roomLabel = CreateLabel(100f, 120f, string.Empty);
-            lockLabel = CreateLabel(100f, 90f, string.Empty);
+            campaignLabel = CreateLabel(100f, 180f, string.Empty);
+            regionLabel = CreateLabel(100f, 150f, string.Empty);
+            cameraModeLabel = CreateLabel(100f, 120f, string.Empty);
+            roomLabel = CreateLabel(100f, 90f, string.Empty);
+            lockLabel = CreateLabel(100f, 60f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 60f, "Right/D -> Next | Left/A -> Prev | Up/Down -> Cam | L -> Lock");
+            travelInstructions = CreateLabel(100f, 30f, "Right/D -> Next | Left/A -> Prev | Up/Down -> Cam | L -> Lock");
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
@@ -101,6 +103,7 @@ namespace RainWorldWallpaperMod
             container.AddChild(chaosLabel);
             container.AddChild(chaosLevelLabel);
             container.AddChild(chaosSpawnAllLabel);
+            container.AddChild(noRainTransitionLabel);
             container.AddChild(chaosWarningLabel);
             container.AddChild(instructionsLabel);
             container.AddChild(closeLabel);
@@ -148,7 +151,12 @@ namespace RainWorldWallpaperMod
             }
 
             // Display rain countdown status
-            if (controller.IsRainCountdownActive)
+            if (controller.IsNoRainWaitMode)
+            {
+                float progress = controller.CycleProgress * 100f;
+                durationLabel.text = $"No Rain Wait: {progress:F0}% / 95% until region change";
+            }
+            else if (controller.IsRainCountdownActive)
             {
                 float remainingSeconds = controller.RainCountdownRemaining;
                 int minutes = (int)(remainingSeconds / 60f);
@@ -175,14 +183,17 @@ namespace RainWorldWallpaperMod
             bool chaosEnabled = WallpaperMod.Options?.EnableChaos.Value ?? false;
             int chaosLevel = WallpaperMod.Options?.ChaosLevel.Value ?? 1;
             bool chaosSpawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
+            bool noRainTransition = WallpaperMod.Options?.NoRainTransition.Value ?? false;
 
             bool isFocusedMode = currentFocus == 5;
             bool isFocusedLevel = currentFocus == 6;
             bool isFocusedSpawnAll = currentFocus == 7;
+            bool isFocusedNoRain = currentFocus == 8;
 
             string modePrefix = isFocusedMode ? ">> " : "   ";
             string levelPrefix = isFocusedLevel ? ">> " : "   ";
             string spawnAllPrefix = isFocusedSpawnAll ? ">> " : "   ";
+            string noRainPrefix = isFocusedNoRain ? ">> " : "   ";
 
             chaosLabel.text = $"{modePrefix}Chaos Mode: [{(chaosEnabled ? "ON" : "OFF")}]";
             chaosLabel.color = isFocusedMode ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
@@ -192,6 +203,9 @@ namespace RainWorldWallpaperMod
 
             chaosSpawnAllLabel.text = $"{spawnAllPrefix}Spawn ALL: [{(chaosSpawnAll ? "ON" : "OFF")}] (experimental!)";
             chaosSpawnAllLabel.color = isFocusedSpawnAll ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
+
+            noRainTransitionLabel.text = $"{noRainPrefix}No Rain Wait: [{(noRainTransition ? "ON" : "OFF")}]";
+            noRainTransitionLabel.color = isFocusedNoRain ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
         }
 
         private void RefreshQuickTravelLabels()
@@ -348,7 +362,7 @@ namespace RainWorldWallpaperMod
 
         public void CycleFocus(int direction)
         {
-            currentFocus = (currentFocus + direction + 8) % 8;
+            currentFocus = (currentFocus + direction + 9) % 9;
             RefreshQuickTravelLabels();
             RefreshChaosLabels();
         }
@@ -413,6 +427,15 @@ namespace RainWorldWallpaperMod
                 if (WallpaperMod.Options != null)
                 {
                     WallpaperMod.Options.ChaosSpawnAll.Value = !WallpaperMod.Options.ChaosSpawnAll.Value;
+                    RefreshChaosLabels();
+                }
+            }
+            else if (currentFocus == 8)
+            {
+                // No rain transition toggle
+                if (WallpaperMod.Options != null)
+                {
+                    WallpaperMod.Options.NoRainTransition.Value = !WallpaperMod.Options.NoRainTransition.Value;
                     RefreshChaosLabels();
                 }
             }
