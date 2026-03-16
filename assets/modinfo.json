@@ -7,5 +7,6 @@
   "description": "Turns Rain World into a dynamic wallpaper with smooth transitions between random locations. Choose different slugcat campaigns and regions through the Remix menu!",
   "requirements": [],
   "requirements_names": [],
+  "tags": ["Game Modes", "Compatible With: Base", "Compatible With: Downpour"],
   "checksum_override_version": false
 }

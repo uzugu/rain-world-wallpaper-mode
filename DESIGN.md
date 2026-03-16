@@ -1,5 +1,9 @@
 # Rain World Wallpaper Mod - Design Document
 
+This file is a historical planning document. It does not fully describe the current implementation.
+
+For the current code/file layout, see `ARCHITECTURE.md`.
+
 ## Overview
 Transform Rain World into a dynamic animated wallpaper that smoothly transitions between random locations across the world.
 
