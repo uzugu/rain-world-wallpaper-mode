@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
@@ -11,98 +9,50 @@ namespace RainWorldWallpaperMod
     public class WallpaperController
     {
         public RegionManager RegionManager { get; }
-        public WallpaperHUD Hud { get; private set; }
         public RainWorldGame Game { get; }
         public EchoMusicManager EchoMusic { get; private set; }
         public ChaosManager ChaosManager { get; private set; }
+        public WallpaperHUD Hud => uiController.Hud;
 
         // Transition settings
         private float transitionDuration = 5f;
         private float stayDuration = 15f;
-        private float currentTimer = 0f;
-        private bool isTransitioning = false;
-
-        // Rain-triggered region changes
-        private bool hasTriggeredRainCountdown = false; // Track if we've already started countdown this cycle
-        private bool isRainCountdownActive = false;
-        private float rainCountdownTimer = 0f;
-        private float rainCountdownDuration = 120f; // Will be randomized when rain starts
-        private const float CYCLE_COMPLETION_THRESHOLD = 0.85f; // Start countdown when 85% through the cycle
-        private const float NO_RAIN_THRESHOLD = 0.95f; // Instant transition when 95% through the cycle (no rain wait mode)
-        private const float RAIN_COUNTDOWN_MIN = 60f;   // 1 minute min
-        private const float RAIN_COUNTDOWN_MAX = 180f;  // 3 minutes max
-
-        // Camera interpolation
-        private Vector2 startPosition;
-        private Vector2 targetPosition;
-        private float transitionProgress = 0f;
-
-        // Room tracking
-        private AbstractRoom currentTargetRoom;
-        private AbstractRoom previousRoom;
-        private readonly List<string> roomHistory = new List<string>();
-        private const int MAX_HISTORY = 10;
 
         // Location tracking
         private string currentRegionCode;
-        private string currentRoomName = string.Empty;
-        private string nextRoomName = string.Empty;
-        private string previousRoomName = string.Empty;
-
-        // Camera mode
-        private WallpaperModOptions.CameraMode cameraMode = WallpaperModOptions.CameraMode.RandomExploration;
-        private int currentCameraPositionIndex = 0;
-
-        // RandomExploration mode tracking
-        private List<int> unvisitedPositions = new List<int>();
-        private int remainingJumps = 0;
 
         // Room lock
         private bool isRoomLocked = false;
 
-        private bool hasInitializedHud = false;
         private readonly System.Random random = new System.Random();
-        private bool spectatorPrepared;
-        private bool hasStartedExploration;
-        private bool preparingWorldReload;
-        private bool settingsMenuVisible;
-        private bool hasInitializedSettingsOverlay;
-        private WallpaperSettingsOverlay settingsOverlay;
         private bool axisSkipActive;
-
-        // Player cleanup tracking - check continuously but only log when found
-        private int playerCheckCounter = 0;
-        private const int PLAYER_CHECK_INTERVAL = 40; // Check every 40 frames (~0.67 seconds at 60fps)
-
-        // Button state tracking for reliable input
-        private bool lastPauseButton;
-        private bool lastToggleOverlayButton;
-        private bool lastNextRoomButton;
-        private bool lastRegionForwardButton;
-        private bool lastRegionBackButton;
-        private bool lastHudToggleButton;
-        private bool lastUpArrowButton;
-        private bool lastDownArrowButton;
-        private bool lastLeftArrowButton;
-        private bool lastRightArrowButton;
-        private bool lastEnterButton;
-        private bool lastLockButton;
+        private readonly WallpaperInputState inputState = new WallpaperInputState();
+        private readonly WallpaperRainCycleController rainCycleController;
+        private readonly WallpaperRoomTracker roomTracker;
+        private readonly WallpaperUiController uiController = new WallpaperUiController();
+        private readonly WallpaperSpectatorState spectatorState = new WallpaperSpectatorState();
+        private readonly WallpaperSessionState sessionState = new WallpaperSessionState();
+        private readonly WallpaperTransitionController transitionController;
 
         public WallpaperController(RainWorldGame game, string startRegion)
         {
             Game = game ?? throw new ArgumentNullException(nameof(game));
+            rainCycleController = new WallpaperRainCycleController(random);
+            roomTracker = new WallpaperRoomTracker(random);
 
             currentRegionCode = startRegion;
             RegionManager = new RegionManager(this, startRegion);
             EchoMusic = new EchoMusicManager(game);
             ChaosManager = new ChaosManager(game, this);
+            transitionController = new WallpaperTransitionController(game, roomTracker, RegionManager, EchoMusic);
 
             // Load settings from config
             if (WallpaperMod.Options != null)
             {
                 transitionDuration = WallpaperMod.Options.TransitionDuration.Value;
                 stayDuration = WallpaperMod.Options.StayDuration.Value;
-                cameraMode = WallpaperModOptions.GetCameraMode(WallpaperMod.Options.CameraModeConfig.Value);
+                transitionController.SetTransitionDuration(transitionDuration);
+                roomTracker.SetCameraMode(WallpaperModOptions.GetCameraMode(WallpaperMod.Options.CameraModeConfig.Value));
 
                 // Initialize chaos if enabled
                 if (WallpaperMod.Options.EnableChaos.Value)
@@ -112,7 +62,7 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (start region: {currentRegionCode}, camera mode: {cameraMode})");
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (start region: {currentRegionCode}, camera mode: {WallpaperModOptions.GetCameraMode(WallpaperMod.Options?.CameraModeConfig.Value ?? WallpaperModOptions.CameraMode.RandomExploration.ToString())})");
         }
 
         /// <summary>
@@ -120,8 +70,6 @@ namespace RainWorldWallpaperMod
         /// </summary>
         public void Update(float dt)
         {
-            // Handle critical inputs FIRST, before any early returns
-            // This ensures F1/Tab and Escape always work
             HandleCriticalInput();
 
             if (Game == null || Game.cameras == null || Game.cameras.Length == 0)
@@ -130,78 +78,19 @@ namespace RainWorldWallpaperMod
             }
 
             EnsureSpectatorState();
-
-            // Ghost marking disabled - worldGhost is per-echo, not global
-            // Echoes work differently than expected, leaving at karma 10 for now
-
-            if (preparingWorldReload || !spectatorPrepared)
+            if (!CanRunWallpaperSession())
             {
-                if (preparingWorldReload)
-                {
-                    WallpaperMod.Log?.LogDebug("WallpaperController: Waiting for region reload");
-                }
                 return;
             }
 
-            if (!hasInitializedHud)
-            {
-                TryInitializeHud(Game.cameras[0]);
-            }
-            if (!hasInitializedSettingsOverlay)
-            {
-                TryInitializeSettingsOverlay(Game.cameras[0]);
-            }
-
-            if (!hasStartedExploration && Game.world != null && Game.world.abstractRooms != null && Game.world.abstractRooms.Length > 0)
-            {
-                hasStartedExploration = true;
-                currentTimer = stayDuration;
-            }
-
+            uiController.EnsureInitialized(GetPrimaryCamera(), this);
+            sessionState.TryStartExploration(Game.world, stayDuration);
             HandleInput();
-
-            if (!isRoomLocked)
-            {
-                currentTimer += dt;
-            }
-
-            // Rain-based region changing
-            HandleRainDetection(dt);
-
-            // Only auto-transition if not locked
-            if (!isTransitioning && currentTimer >= stayDuration && !isRoomLocked)
-            {
-                StartTransitionToRandomRoom();
-            }
-            else if (isTransitioning)
-            {
-                UpdateTransition(dt);
-            }
-
+            AdvanceSession(dt);
             EchoMusic?.Update();
-            
-            // Handle Chaos Mode toggling at runtime
-            if (WallpaperMod.Options != null && ChaosManager != null)
-            {
-                bool chaosEnabledInSettings = WallpaperMod.Options.EnableChaos.Value;
-                bool chaosCurrentlyActive = ChaosManager.IsEnabled;
-                
-                if (chaosEnabledInSettings && !chaosCurrentlyActive)
-                {
-                    // Enable chaos if setting is ON but manager is OFF
-                    int chaosLevel = WallpaperMod.Options.ChaosLevel.Value;
-                    ChaosManager.EnableChaos(chaosLevel);
-                }
-                else if (!chaosEnabledInSettings && chaosCurrentlyActive)
-                {
-                    // Disable chaos if setting is OFF but manager is ON
-                    ChaosManager.DisableChaos();
-                }
-            }
-            
+            SyncChaosRuntimeState();
             ChaosManager?.Update(dt);
-
-            Hud?.Update();
+            uiController.Hud?.Update();
         }
 
         /// <summary>
@@ -216,17 +105,14 @@ namespace RainWorldWallpaperMod
 
             EnsureSpectatorState();
 
-            if (!spectatorPrepared)
+            if (!spectatorState.IsPrepared)
             {
                 return;
             }
 
-            if (!hasInitializedHud)
-            {
-                TryInitializeHud(camera);
-            }
+            uiController.EnsureHudInitialized(camera, this);
 
-            if (isTransitioning && camera.followAbstractCreature == null)
+            if (sessionState.IsTransitioning && camera.followAbstractCreature == null)
             {
                 // Camera position handled during transition update
             }
@@ -234,36 +120,25 @@ namespace RainWorldWallpaperMod
 
         public void Shutdown()
         {
-            Hud?.Destroy();
+            uiController.Shutdown();
             RegionManager?.Cleanup();
             EchoMusic?.Shutdown();
             ChaosManager?.Shutdown();
-            settingsOverlay?.Destroy();
-            settingsOverlay = null;
-            hasInitializedSettingsOverlay = false;
-            settingsMenuVisible = false;
             axisSkipActive = false;
+            inputState.Reset();
+            rainCycleController.Clear();
 
-            roomHistory.Clear();
-            currentTargetRoom = null;
-            previousRoom = null;
-            spectatorPrepared = false;
-            hasStartedExploration = false;
-            preparingWorldReload = false;
-            isTransitioning = false;
-            currentTimer = 0f;
+            roomTracker.Reset();
+            spectatorState.Reset();
+            sessionState.Reset();
 
             WallpaperMod.Log?.LogInfo("WallpaperController: Shutdown complete");
         }
 
         private void HandleCriticalInput()
         {
-            // Track button states to detect press edges (transitions from unpressed to pressed)
-            // This pattern is more reliable than Input.GetKeyDown() alone
-
-            // Escape key - return to main menu
             bool pauseButton = Input.GetKey(KeyCode.Escape);
-            if (pauseButton && !lastPauseButton)
+            if (inputState.WasPressed(WallpaperInputButton.Pause, pauseButton))
             {
                 WallpaperMod.Log?.LogInfo("WallpaperController: ESC pressed, returning to main menu");
                 if (Game?.manager != null)
@@ -271,118 +146,19 @@ namespace RainWorldWallpaperMod
                     Game.manager.RequestMainProcessSwitch(ProcessManager.ProcessID.MainMenu);
                 }
             }
-            lastPauseButton = pauseButton;
 
-            // F1/Tab for settings overlay
             bool toggleOverlayButton = Input.GetKey(KeyCode.F1) || Input.GetKey(KeyCode.Tab);
-            if (toggleOverlayButton && !lastToggleOverlayButton)
+            if (inputState.WasPressed(WallpaperInputButton.ToggleOverlay, toggleOverlayButton))
             {
-                ToggleSettingsMenu();
+                uiController.ToggleSettingsMenu(GetPrimaryCamera(), this);
             }
-            lastToggleOverlayButton = toggleOverlayButton;
         }
 
-        /// <summary>
-        /// Resets rain tracking state when entering a new region
-        /// </summary>
         private void ResetRainTracking()
         {
-            hasTriggeredRainCountdown = false;
-            isRainCountdownActive = false;
-            rainCountdownTimer = 0f;
-
-            if (Game?.world?.rainCycle != null)
-            {
-                int timer = Game.world.rainCycle.timer;
-                int cycleLength = Game.world.rainCycle.cycleLength;
-                float cycleProgress = cycleLength > 0 ? (float)timer / cycleLength : 0f;
-
-                WallpaperMod.Log?.LogInfo($"Rain tracking reset for new region (cycle: {timer}/{cycleLength}, progress: {cycleProgress:P0})");
-
-                // If we're already past the threshold when entering, start countdown immediately
-                if (cycleProgress >= CYCLE_COMPLETION_THRESHOLD)
-                {
-                    rainCountdownDuration = RAIN_COUNTDOWN_MIN + (float)(random.NextDouble() * (RAIN_COUNTDOWN_MAX - RAIN_COUNTDOWN_MIN));
-                    rainCountdownTimer = 0f;
-                    isRainCountdownActive = true;
-                    hasTriggeredRainCountdown = true;
-                    WallpaperMod.Log?.LogInfo($"Cycle already {cycleProgress:P0} complete! Starting countdown: {rainCountdownDuration:F1}s");
-                }
-            }
+            rainCycleController.ResetForRegion(Game);
         }
 
-        /// <summary>
-        /// Monitors rain cycle timer and triggers region change when day is ending
-        /// </summary>
-        private void HandleRainDetection(float dt)
-        {
-            if (Game?.world?.rainCycle == null)
-            {
-                return;
-            }
-
-            int timer = Game.world.rainCycle.timer;
-            int cycleLength = Game.world.rainCycle.cycleLength;
-
-            if (cycleLength <= 0)
-            {
-                return; // Invalid cycle length
-            }
-
-            float cycleProgress = (float)timer / cycleLength;
-            bool noRainWait = WallpaperMod.Options?.NoRainTransition.Value ?? false;
-
-            // Debug: Log cycle progress every 5 seconds
-            if (Time.frameCount % 300 == 0) // ~5 seconds at 60fps
-            {
-                WallpaperMod.Log?.LogInfo($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CYCLE_COMPLETION_THRESHOLD:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}, noRainWait={noRainWait}");
-            }
-
-            // No Rain Wait mode: instant transition at 95%
-            if (noRainWait)
-            {
-                if (!hasTriggeredRainCountdown && cycleProgress >= NO_RAIN_THRESHOLD && !isRoomLocked)
-                {
-                    hasTriggeredRainCountdown = true;
-                    WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] No Rain Wait: Instant transition at {cycleProgress:P1}!");
-                    OnRainRegionChange();
-                }
-                return;
-            }
-
-            // Normal mode: Start countdown when cycle reaches threshold (85% complete)
-            if (!hasTriggeredRainCountdown && cycleProgress >= CYCLE_COMPLETION_THRESHOLD)
-            {
-                // Day is ending! Start random countdown using config values
-                float minCountdown = WallpaperMod.Options?.RainCountdownMin.Value ?? RAIN_COUNTDOWN_MIN;
-                float maxCountdown = WallpaperMod.Options?.RainCountdownMax.Value ?? RAIN_COUNTDOWN_MAX;
-                rainCountdownDuration = minCountdown + (float)(random.NextDouble() * (maxCountdown - minCountdown));
-                rainCountdownTimer = 0f;
-                isRainCountdownActive = true;
-                hasTriggeredRainCountdown = true;
-
-                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s (range: {minCountdown}-{maxCountdown}s)");
-            }
-
-            // Update countdown if active
-            if (isRainCountdownActive && !isRoomLocked)
-            {
-                rainCountdownTimer += dt;
-
-                if (rainCountdownTimer >= rainCountdownDuration)
-                {
-                    // Countdown complete - change region!
-                    OnRainRegionChange();
-                    isRainCountdownActive = false;
-                    rainCountdownTimer = 0f;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Triggered when rain countdown completes - changes to a random unvisited region
-        /// or cycles to next campaign if all regions visited
-        /// </summary>
         private void OnRainRegionChange()
         {
             WallpaperMod.Log?.LogInfo("Rain World Wallpaper Mode] Rain countdown complete, changing region...");
@@ -405,6 +181,125 @@ namespace RainWorldWallpaperMod
 
         private void HandleInput()
         {
+            RegisterUserActivityFromAnyInput();
+            bool settingsActive = uiController.IsSettingsActive;
+            var settingsOverlay = uiController.SettingsOverlay;
+
+            if (settingsActive)
+            {
+                HandleOverlayInput(settingsOverlay);
+            }
+            else
+            {
+                HandleNormalInput();
+            }
+
+            bool nextRoomButton = Input.GetKey(KeyCode.N);
+            if (inputState.WasPressed(WallpaperInputButton.NextRoom, nextRoomButton))
+            {
+                uiController.RegisterUserActivity();
+                ForceImmediateLocationChange();
+            }
+
+            bool regionForwardButton = Input.GetKey(KeyCode.G);
+            if (!settingsActive && inputState.WasPressed(WallpaperInputButton.RegionForward, regionForwardButton) && !sessionState.IsPreparingWorldReload)
+            {
+                uiController.RegisterUserActivity();
+                RegionManager?.AdvanceToNextRegion();
+            }
+
+            bool regionBackButton = Input.GetKey(KeyCode.B);
+            if (inputState.WasPressed(WallpaperInputButton.RegionBack, regionBackButton) && !sessionState.IsPreparingWorldReload)
+            {
+                uiController.RegisterUserActivity();
+                RegionManager?.AdvanceToPreviousRegion();
+            }
+
+            bool lockButton = Input.GetKey(KeyCode.L);
+            if (inputState.WasPressed(WallpaperInputButton.Lock, lockButton))
+            {
+                ToggleRoomLock();
+            }
+
+            bool camUpButton = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W);
+            if (inputState.WasPressed(WallpaperInputButton.Up, camUpButton))
+            {
+                CycleCameraPosition(1);
+            }
+
+            bool camDownButton = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
+            if (inputState.WasPressed(WallpaperInputButton.Down, camDownButton))
+            {
+                CycleCameraPosition(-1);
+            }
+
+            bool navLeftButton = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A);
+            if (inputState.WasPressed(WallpaperInputButton.Left, navLeftButton))
+            {
+                GoToPreviousRoom();
+            }
+        }
+
+        private bool CanRunWallpaperSession()
+        {
+            if (!sessionState.IsPreparingWorldReload && spectatorState.IsPrepared)
+            {
+                return true;
+            }
+
+            if (sessionState.IsPreparingWorldReload)
+            {
+                WallpaperMod.Log?.LogDebug("WallpaperController: Waiting for region reload");
+            }
+
+            return false;
+        }
+
+        private void AdvanceSession(float dt)
+        {
+            sessionState.TickStayTimer(dt, isRoomLocked);
+
+            if (rainCycleController.Update(Game, dt, isRoomLocked))
+            {
+                OnRainRegionChange();
+            }
+
+            if (sessionState.ShouldAutoTransition(stayDuration, isRoomLocked))
+            {
+                StartTransitionToRandomRoom();
+                return;
+            }
+
+            if (sessionState.IsTransitioning)
+            {
+                UpdateTransition(dt);
+            }
+        }
+
+        private void SyncChaosRuntimeState()
+        {
+            if (WallpaperMod.Options == null || ChaosManager == null)
+            {
+                return;
+            }
+
+            bool chaosEnabledInSettings = WallpaperMod.Options.EnableChaos.Value;
+            bool chaosCurrentlyActive = ChaosManager.IsEnabled;
+
+            if (chaosEnabledInSettings && !chaosCurrentlyActive)
+            {
+                ChaosManager.EnableChaos(WallpaperMod.Options.ChaosLevel.Value);
+                return;
+            }
+
+            if (!chaosEnabledInSettings && chaosCurrentlyActive)
+            {
+                ChaosManager.DisableChaos();
+            }
+        }
+
+        private void RegisterUserActivityFromAnyInput()
+        {
             bool anyKeyPressed = Input.anyKeyDown
                 || Input.GetMouseButtonDown(0)
                 || Input.GetMouseButtonDown(1)
@@ -412,624 +307,159 @@ namespace RainWorldWallpaperMod
 
             if (anyKeyPressed)
             {
-                Hud?.RegisterUserActivity();
+                uiController.RegisterUserActivity();
+            }
+        }
+
+        private void HandleOverlayInput(WallpaperSettingsOverlay settingsOverlay)
+        {
+            bool overlayDirty = false;
+
+            if (inputState.WasPressed(WallpaperInputButton.Up, Input.GetKey(KeyCode.UpArrow)))
+            {
+                settingsOverlay?.CycleFocus(-1);
+                overlayDirty = true;
             }
 
-            // Note: Escape and F1/Tab are handled in HandleCriticalInput()
-            // which runs before any early returns in Update()
-
-            bool settingsActive = settingsMenuVisible && settingsOverlay != null && settingsOverlay.IsVisible;
-
-            if (settingsActive)
+            if (inputState.WasPressed(WallpaperInputButton.Down, Input.GetKey(KeyCode.DownArrow)))
             {
-                bool overlayDirty = false;
-
-                // Quick travel controls (Up/Down to switch focus, Left/Right to cycle, Enter/G to travel)
-                bool upArrowButton = Input.GetKey(KeyCode.UpArrow);
-                if (upArrowButton && !lastUpArrowButton)
-                {
-                    settingsOverlay?.CycleFocus(-1);
-                    overlayDirty = true;
-                }
-                lastUpArrowButton = upArrowButton;
-
-                bool downArrowButton = Input.GetKey(KeyCode.DownArrow);
-                if (downArrowButton && !lastDownArrowButton)
-                {
-                    settingsOverlay?.CycleFocus(1);
-                    overlayDirty = true;
-                }
-                lastDownArrowButton = downArrowButton;
-
-                bool rightArrowButton = Input.GetKey(KeyCode.RightArrow);
-                if (rightArrowButton && !lastRightArrowButton)
-                {
-                    settingsOverlay?.CycleCurrentSelection(1);
-                    overlayDirty = true;
-                }
-                lastRightArrowButton = rightArrowButton;
-
-                bool leftArrowButton = Input.GetKey(KeyCode.LeftArrow);
-                if (leftArrowButton && !lastLeftArrowButton)
-                {
-                    settingsOverlay?.CycleCurrentSelection(-1);
-                    overlayDirty = true;
-                }
-                lastLeftArrowButton = leftArrowButton;
-
-                // Apply travel with Enter or G
-                bool enterButton = Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter) || Input.GetKey(KeyCode.G);
-                if (enterButton && !lastEnterButton)
-                {
-                    settingsOverlay?.ApplyTravel();
-                    ToggleSettingsMenu(); // Close overlay after applying
-                }
-                lastEnterButton = enterButton;
-
-                // H key - toggle HUD
-                bool hudToggleButton = Input.GetKey(KeyCode.H);
-                if (hudToggleButton && !lastHudToggleButton)
-                {
-                    if (Hud != null)
-                    {
-                        bool newValue = !Hud.AlwaysShowHUD;
-                        Hud.SetAlwaysShowHUD(newValue);
-                        Hud.RegisterUserActivity();
-                        overlayDirty = true;
-                    }
-                }
-                lastHudToggleButton = hudToggleButton;
-
-                if (overlayDirty)
-                {
-                    settingsOverlay?.Refresh();
-                }
+                settingsOverlay?.CycleFocus(1);
+                overlayDirty = true;
             }
-            else
+
+            if (inputState.WasPressed(WallpaperInputButton.Right, Input.GetKey(KeyCode.RightArrow)))
             {
-                // H key - toggle HUD
-                bool hudToggleButton = Input.GetKey(KeyCode.H);
-                if (hudToggleButton && !lastHudToggleButton)
-                {
-                    if (Hud != null)
-                    {
-                        bool newValue = !Hud.AlwaysShowHUD;
-                        Hud.SetAlwaysShowHUD(newValue);
-                        Hud.RegisterUserActivity();
-                        WallpaperMod.Log?.LogInfo($"WallpaperController: Always show HUD toggled {(newValue ? "ON" : "OFF")}");
-                        settingsOverlay?.Refresh();
-                    }
-                }
-                lastHudToggleButton = hudToggleButton;
+                settingsOverlay?.CycleCurrentSelection(1);
+                overlayDirty = true;
+            }
 
-                bool nextRoomRequested = false;
+            if (inputState.WasPressed(WallpaperInputButton.Left, Input.GetKey(KeyCode.LeftArrow)))
+            {
+                settingsOverlay?.CycleCurrentSelection(-1);
+                overlayDirty = true;
+            }
 
-                // Right Arrow/D key with state tracking
-                bool rightArrowButton = Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D);
-                if (rightArrowButton && !lastRightArrowButton)
+            bool enterButton = Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter) || Input.GetKey(KeyCode.G);
+            if (inputState.WasPressed(WallpaperInputButton.Enter, enterButton))
+            {
+                settingsOverlay?.ApplyTravel();
+                uiController.ToggleSettingsMenu(GetPrimaryCamera(), this);
+            }
+
+            if (TryToggleHud(showLogMessage: false))
+            {
+                overlayDirty = true;
+            }
+
+            if (overlayDirty)
+            {
+                settingsOverlay?.Refresh();
+            }
+        }
+
+        private void HandleNormalInput()
+        {
+            TryToggleHud(showLogMessage: true);
+
+            bool nextRoomRequested = inputState.WasPressed(
+                WallpaperInputButton.Right,
+                Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D));
+
+            float horizontalAxis = 0f;
+            try
+            {
+                horizontalAxis = Input.GetAxisRaw("Horizontal");
+            }
+            catch
+            {
+            }
+
+            if (horizontalAxis > 0.6f)
+            {
+                if (!axisSkipActive)
                 {
                     nextRoomRequested = true;
-                }
-                lastRightArrowButton = rightArrowButton;
-
-                // Controller axis handling (already has debouncing via axisSkipActive)
-                float horizontalAxis = 0f;
-                try
-                {
-                    horizontalAxis = Input.GetAxisRaw("Horizontal");
-                }
-                catch
-                {
-                    // Axis not configured; ignore
-                }
-
-                if (horizontalAxis > 0.6f)
-                {
-                    if (!axisSkipActive)
-                    {
-                        nextRoomRequested = true;
-                        axisSkipActive = true;
-                    }
-                }
-                else if (horizontalAxis < 0.2f && horizontalAxis > -0.2f)
-                {
-                    axisSkipActive = false;
-                }
-
-                if (nextRoomRequested)
-                {
-                    Hud?.RegisterUserActivity();
-                    ForceImmediateLocationChange();
+                    axisSkipActive = true;
                 }
             }
-
-            // N key - next room
-            bool nextRoomButton = Input.GetKey(KeyCode.N);
-            if (nextRoomButton && !lastNextRoomButton)
+            else if (horizontalAxis < 0.2f && horizontalAxis > -0.2f)
             {
-                Hud?.RegisterUserActivity();
+                axisSkipActive = false;
+            }
+
+            if (nextRoomRequested)
+            {
+                uiController.RegisterUserActivity();
                 ForceImmediateLocationChange();
             }
-            lastNextRoomButton = nextRoomButton;
+        }
 
-            // G key - next region
-            bool regionForwardButton = Input.GetKey(KeyCode.G);
-            if (regionForwardButton && !lastRegionForwardButton && !preparingWorldReload)
+        private bool TryToggleHud(bool showLogMessage)
+        {
+            bool hudToggleButton = Input.GetKey(KeyCode.H);
+            if (!inputState.WasPressed(WallpaperInputButton.HudToggle, hudToggleButton) || Hud == null)
             {
-                Hud?.RegisterUserActivity();
-                RegionManager?.AdvanceToNextRegion();
+                return false;
             }
-            lastRegionForwardButton = regionForwardButton;
 
-            // B key - previous region
-            bool regionBackButton = Input.GetKey(KeyCode.B);
-            if (regionBackButton && !lastRegionBackButton && !preparingWorldReload)
-            {
-                Hud?.RegisterUserActivity();
-                RegionManager?.AdvanceToPreviousRegion();
-            }
-            lastRegionBackButton = regionBackButton;
+            bool newValue = !Hud.AlwaysShowHUD;
+            Hud.SetAlwaysShowHUD(newValue);
+            uiController.RegisterUserActivity();
+            uiController.RefreshOverlay();
 
-            // L key - toggle room lock
-            bool lockButton = Input.GetKey(KeyCode.L);
-            if (lockButton && !lastLockButton)
+            if (showLogMessage)
             {
-                ToggleRoomLock();
+                WallpaperMod.Log?.LogInfo($"WallpaperController: Always show HUD toggled {(newValue ? "ON" : "OFF")}");
             }
-            lastLockButton = lockButton;
 
-            // Up/Down arrows - cycle camera views
-            bool camUpButton = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W);
-            if (camUpButton && !lastUpArrowButton)
-            {
-                CycleCameraPosition(1);
-            }
-            lastUpArrowButton = camUpButton;
-
-            bool camDownButton = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
-            if (camDownButton && !lastDownArrowButton)
-            {
-                CycleCameraPosition(-1);
-            }
-            lastDownArrowButton = camDownButton;
-
-            // Left Arrow/A - Previous Room
-            bool navLeftButton = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A);
-            if (navLeftButton && !lastLeftArrowButton)
-            {
-                GoToPreviousRoom();
-            }
-            lastLeftArrowButton = navLeftButton;
+            return true;
         }
 
         private void EnsureSpectatorState()
         {
-            if (Game?.world == null)
+            if (!spectatorState.EnsurePrepared(Game, roomTracker))
             {
                 return;
             }
 
-            if (Game.cameras == null || Game.cameras.Length == 0)
-            {
-                return;
-            }
-
-            // Always detach camera from creatures
-            foreach (var camera in Game.cameras)
-            {
-                if (camera != null)
-                {
-                    camera.followAbstractCreature = null;
-                }
-            }
-
-            // Periodically check for and remove player entities
-            // Players can spawn at any time, so we check continuously but not every frame
-            // IMPORTANT: Don't remove slugpups (NPCs) - they're spawned by ChaosManager!
-            playerCheckCounter++;
-            if (playerCheckCounter >= PLAYER_CHECK_INTERVAL)
-            {
-                playerCheckCounter = 0;
-
-                if (Game.Players != null && Game.Players.Count > 0)
-                {
-                    var playersToRemove = new System.Collections.Generic.List<AbstractCreature>();
-
-                    // WallpaperMod.Log?.LogInfo($"WallpaperController: Checking {Game.Players.Count} player(s)");
-
-                    foreach (var abstractPlayer in Game.Players)
-                    {
-                        if (abstractPlayer?.state is PlayerState playerState)
-                        {
-
-                            // Don't remove slugpups (NPCs) - they're spawned by ChaosManager
-                            // Check both isPup flag AND explicit creature type "SlugNPC"
-                            if (playerState.isPup || abstractPlayer.creatureTemplate.type.ToString() == "SlugNPC")
-                            {
-                                // WallpaperMod.Log?.LogInfo($"  -> Keeping slugpup/SlugNPC!");
-                                continue; // Skip slugpups
-                            }
-                        }
-                        else
-                        {
-                            // WallpaperMod.Log?.LogWarning($"  Player has no PlayerState or wrong state type: {abstractPlayer?.state?.GetType().Name}");
-                        }
-
-                        // Remove actual player slugcats
-                        // WallpaperMod.Log?.LogInfo($"  -> Marking for removal. Type: {abstractPlayer.creatureTemplate.type.ToString()}");
-                        playersToRemove.Add(abstractPlayer);
-                    }
-
-                    if (playersToRemove.Count > 0)
-                    {
-                        // WallpaperMod.Log?.LogInfo($"WallpaperController: Removing {playersToRemove.Count} actual player(s), keeping {Game.Players.Count - playersToRemove.Count} slugpups");
-                        foreach (var abstractPlayer in playersToRemove)
-                        {
-                            // WallpaperMod.Log?.LogInfo($"  REMOVING: {abstractPlayer.ID} Type: {abstractPlayer.creatureTemplate.type.ToString()}");
-                            if (abstractPlayer?.realizedCreature is global::Player realizedPlayer)
-                            {
-                                realizedPlayer.RemoveFromRoom();
-                                realizedPlayer.Destroy();
-                            }
-                            Game.Players.Remove(abstractPlayer);
-                        }
-                    }
-                }
-            }
-
-            // Only run initialization logic once
-            if (spectatorPrepared)
-            {
-                return;
-            }
-
-            roomHistory.Clear();
-            currentRoomName = string.Empty;
-            nextRoomName = string.Empty;
-            previousRoomName = string.Empty;
-
-            currentRegionCode = Game.world.name ?? currentRegionCode;
-
-            // Temporarily disabled to test natural echo spawning
-            // EnableEchoSpawning();
-
-            // Reset rain tracking for initial region load
+            currentRegionCode = Game?.world?.name ?? currentRegionCode;
             ResetRainTracking();
-
-            spectatorPrepared = true;
-            currentTimer = stayDuration;
-            preparingWorldReload = false;
-        }
-
-        /// <summary>
-        /// Set karma to maximum to allow echoes (ghosts) to spawn in wallpaper mode.
-        /// Echoes are now confirmed working with just karma=10, karmaCap=10, and cycleNumber=5.
-        /// </summary>
-        private void EnableEchoSpawning()
-        {
-            // Check if echo spawning is enabled in config
-            if (WallpaperMod.Options != null && !WallpaperMod.Options.EnableEchoes.Value)
-            {
-                WallpaperMod.Log?.LogInfo("WallpaperController: Echo spawning disabled in config");
-                return;
-            }
-
-            // Access the session from the game
-            if (Game?.session is StoryGameSession storySession &&
-                storySession.saveState?.deathPersistentSaveData != null)
-            {
-                // Set karma to maximum (10) to allow all echoes to spawn
-                storySession.saveState.deathPersistentSaveData.karma = 10;
-                storySession.saveState.deathPersistentSaveData.karmaCap = 10;
-
-                // Set cycle number to 5+ to simulate having played for several cycles
-                // Echoes require this to bypass the sleep requirement after priming
-                if (storySession.saveState.cycleNumber < 5)
-                {
-                    storySession.saveState.cycleNumber = 5;
-                }
-
-                WallpaperMod.Log?.LogInfo($"WallpaperController: Echo spawning enabled (Karma: 10/10, Cycle: {storySession.saveState.cycleNumber})");
-            }
-            else
-            {
-                WallpaperMod.Log?.LogWarning("WallpaperController: Could not enable echoes - not a story session or save state unavailable");
-            }
-        }
-
-        private void TryInitializeHud(RoomCamera camera)
-        {
-            if (camera == null || hasInitializedHud)
-            {
-                return;
-            }
-
-            // HUD no longer needs camera.hud - it adds to Futile.stage directly
-            var hud = new WallpaperHUD(camera, this);
-            if (!hud.IsReady)
-            {
-                return;
-            }
-
-            Hud = hud;
-            hasInitializedHud = true;
-            Hud.RegisterUserActivity();
-            WallpaperMod.Log?.LogInfo("WallpaperController: HUD initialized successfully");
-        }
-
-        private void TryInitializeSettingsOverlay(RoomCamera camera)
-        {
-            if (camera == null || hasInitializedSettingsOverlay)
-            {
-                return;
-            }
-
-            // Settings overlay also adds to Futile.stage directly
-            settingsOverlay = new WallpaperSettingsOverlay(camera, this);
-            hasInitializedSettingsOverlay = true;
-            WallpaperMod.Log?.LogInfo("WallpaperController: Settings overlay initialized successfully");
+            sessionState.MarkWorldReady(stayDuration);
         }
 
         private void StartTransitionToRandomRoom()
         {
-            if (preparingWorldReload)
+            if (sessionState.IsPreparingWorldReload || !spectatorState.IsPrepared)
             {
                 return;
             }
 
-            if (!spectatorPrepared)
-            {
-                return;
-            }
-
-            if (Game.world == null || Game.world.abstractRooms == null || Game.world.abstractRooms.Length == 0)
-            {
-                WallpaperMod.Log?.LogWarning("WallpaperController: World not ready, cannot transition");
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(Game.world.name))
+            if (!string.IsNullOrEmpty(Game.world?.name))
             {
                 currentRegionCode = Game.world.name;
             }
 
-            // Check if we should stay in the current room
-            bool shouldStayInCurrentRoom = false;
-
-            if (cameraMode == WallpaperModOptions.CameraMode.Sequential &&
-                currentTargetRoom != null &&
-                currentTargetRoom.realizedRoom != null &&
-                currentTargetRoom.realizedRoom.cameraPositions != null)
-            {
-                int totalPositions = currentTargetRoom.realizedRoom.cameraPositions.Length;
-                if (totalPositions > 1 && currentCameraPositionIndex < totalPositions - 1)
-                {
-                    shouldStayInCurrentRoom = true;
-                }
-            }
-            else if (cameraMode == WallpaperModOptions.CameraMode.RandomExploration &&
-                     remainingJumps > 0 &&
-                     unvisitedPositions.Count > 0 &&
-                     currentTargetRoom != null)
-            {
-                shouldStayInCurrentRoom = true;
-            }
-
-            AbstractRoom selectedRoom;
-            if (shouldStayInCurrentRoom)
-            {
-                selectedRoom = currentTargetRoom;
-            }
-            else
-            {
-                selectedRoom = SelectRandomRoom(Game.world.abstractRooms);
-                if (selectedRoom == null)
-                {
-                    WallpaperMod.Log?.LogWarning("WallpaperController: Failed to select next room");
-                    return;
-                }
-            }
-
-            var primaryCamera = Game.cameras[0];
-            startPosition = primaryCamera.pos;
-
-            if (selectedRoom.realizedRoom == null)
-            {
-                selectedRoom.RealizeRoom(Game.world, Game);
-            }
-
-            bool isNewRoom = selectedRoom != currentTargetRoom;
-            if (selectedRoom.realizedRoom != null &&
-                selectedRoom.realizedRoom.cameraPositions != null &&
-                selectedRoom.realizedRoom.cameraPositions.Length > 0)
-            {
-                int camIndex = SelectCameraPosition(selectedRoom.realizedRoom.cameraPositions.Length, isNewRoom);
-                targetPosition = selectedRoom.realizedRoom.cameraPositions[camIndex];
-            }
-            else
-            {
-                targetPosition = startPosition;
-            }
-
-            previousRoom = currentTargetRoom;
-            previousRoomName = currentRoomName;
-
-            currentTargetRoom = selectedRoom;
-            nextRoomName = selectedRoom.name;
-
-            // Only add to history if it's a new room
-            if (isNewRoom)
-            {
-                roomHistory.Add(selectedRoom.name);
-                if (roomHistory.Count > MAX_HISTORY)
-                {
-                    roomHistory.RemoveAt(0);
-                }
-            }
-
-            isTransitioning = true;
-            transitionProgress = 0f;
-            currentTimer = 0f;
-
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Transitioning to room {selectedRoom.name}");
+            transitionController.StartTransitionToRandomRoom(sessionState);
         }
 
         private void StartTransitionToSpecificRoom(AbstractRoom targetRoom)
         {
-            if (preparingWorldReload || !spectatorPrepared)
+            if (sessionState.IsPreparingWorldReload || !spectatorState.IsPrepared)
             {
                 return;
             }
 
-            if (Game.cameras == null || Game.cameras.Length == 0)
-            {
-                return;
-            }
-
-            var primaryCamera = Game.cameras[0];
-            startPosition = primaryCamera.pos;
-
-            if (targetRoom.realizedRoom == null)
-            {
-                targetRoom.RealizeRoom(Game.world, Game);
-            }
-
-            bool isNewRoom = targetRoom != currentTargetRoom;
-            if (targetRoom.realizedRoom != null &&
-                targetRoom.realizedRoom.cameraPositions != null &&
-                targetRoom.realizedRoom.cameraPositions.Length > 0)
-            {
-                int camIndex = SelectCameraPosition(targetRoom.realizedRoom.cameraPositions.Length, isNewRoom);
-                targetPosition = targetRoom.realizedRoom.cameraPositions[camIndex];
-            }
-            else
-            {
-                targetPosition = startPosition;
-            }
-
-            previousRoom = currentTargetRoom;
-            previousRoomName = currentRoomName;
-
-            currentTargetRoom = targetRoom;
-            nextRoomName = targetRoom.name;
-
-            // Add to history if it's a new room
-            if (isNewRoom && !roomHistory.Contains(targetRoom.name))
-            {
-                roomHistory.Add(targetRoom.name);
-                if (roomHistory.Count > MAX_HISTORY)
-                {
-                    roomHistory.RemoveAt(0);
-                }
-            }
-
-            isTransitioning = true;
-            transitionProgress = 0f;
-            currentTimer = 0f;
-
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Transitioning to specific room {targetRoom.name}");
-        }
-
-        private AbstractRoom SelectRandomRoom(AbstractRoom[] rooms)
-        {
-            var availableRooms = new List<AbstractRoom>();
-
-            foreach (var room in rooms)
-            {
-                if (room == null || room.gate)
-                {
-                    continue;
-                }
-
-                if (roomHistory.Contains(room.name))
-                {
-                    continue;
-                }
-
-                availableRooms.Add(room);
-            }
-
-            if (availableRooms.Count == 0)
-            {
-                roomHistory.Clear();
-
-                foreach (var room in rooms)
-                {
-                    if (room != null && !room.gate)
-                    {
-                        availableRooms.Add(room);
-                    }
-                }
-            }
-
-            if (availableRooms.Count == 0)
-            {
-                return null;
-            }
-
-            return availableRooms[random.Next(availableRooms.Count)];
+            transitionController.StartTransitionToSpecificRoom(targetRoom, sessionState);
         }
 
         private void UpdateTransition(float dt)
         {
-            if (Game.cameras == null || Game.cameras.Length == 0 || Game.cameras[0] == null)
-            {
-                return;
-            }
-
-            transitionProgress = Mathf.Min(transitionProgress + dt / transitionDuration, 1f);
-            float easedProgress = EaseInOutCubic(transitionProgress);
-
-            var camera = Game.cameras[0];
-            camera.pos = Vector2.Lerp(startPosition, targetPosition, easedProgress);
-
-            if (transitionProgress >= 1f)
-            {
-                CompleteTransition(camera);
-            }
+            transitionController.UpdateTransition(dt, sessionState);
         }
 
         private void CompleteTransition(RoomCamera camera)
         {
-            isTransitioning = false;
-            currentTimer = 0f;
-
-            bool isNewRoom = false;
-            if (currentTargetRoom != null && currentTargetRoom.realizedRoom != null)
-            {
-                // Use the selected camera position index instead of always 0
-                camera.MoveCamera(currentTargetRoom.realizedRoom, currentCameraPositionIndex);
-                camera.pos = targetPosition;
-
-                // Only update room name and count if this is actually a new room
-                if (currentRoomName != nextRoomName && !string.IsNullOrEmpty(nextRoomName))
-                {
-                    isNewRoom = true;
-                    currentRoomName = nextRoomName;
-                }
-                nextRoomName = string.Empty;
-            }
-
-            if (previousRoom != null && previousRoom.realizedRoom != null && previousRoom != currentTargetRoom)
-            {
-                previousRoom.Abstractize();
-            }
-
-            // Only count as a new room explored if we actually changed rooms
-            if (isNewRoom)
-            {
-                RegionManager?.OnRoomExplored();
-            }
-
-            // Notify echo music manager of room change (for all room changes, not just new rooms)
-            EchoMusic?.OnRoomChanged(currentTargetRoom);
-        }
-
-        private float EaseInOutCubic(float t)
-        {
-            return t < 0.5f
-                ? 4f * t * t * t
-                : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
+            transitionController.CompleteTransition(camera, sessionState);
         }
 
         internal void OnRegionChanged(string regionCode)
@@ -1043,15 +473,12 @@ namespace RainWorldWallpaperMod
 
             currentRegionCode = regionCode;
 
-            if (!spectatorPrepared || Game.world == null)
+            if (!spectatorState.IsPrepared || Game.world == null)
             {
                 return;
             }
 
-            roomHistory.Clear();
-            currentRoomName = string.Empty;
-            nextRoomName = string.Empty;
-            previousRoomName = string.Empty;
+            roomTracker.Reset();
 
             if (!string.Equals(Game.world.name, regionCode, StringComparison.OrdinalIgnoreCase))
             {
@@ -1060,7 +487,7 @@ namespace RainWorldWallpaperMod
             }
             else
             {
-                currentTimer = stayDuration;
+                sessionState.MarkWorldReady(stayDuration);
                 // Reset rain tracking for new region
                 ResetRainTracking();
                 // Notify chaos manager of region change (even if staying in same region)
@@ -1070,21 +497,13 @@ namespace RainWorldWallpaperMod
 
         internal void PrepareForWorldReload()
         {
-            preparingWorldReload = true;
-            isTransitioning = false;
-            spectatorPrepared = false;
-            hasStartedExploration = false;
-            currentTimer = 0f;
-            roomHistory.Clear();
-            Hud?.Destroy();
-            Hud = null;
-            hasInitializedHud = false;
-            settingsOverlay?.Destroy();
-            settingsOverlay = null;
-            hasInitializedSettingsOverlay = false;
-            settingsMenuVisible = false;
+            sessionState.PrepareForReload();
+            roomTracker.Reset();
+            uiController.ResetForReload();
             axisSkipActive = false;
-            playerCheckCounter = 0; // Reset player check counter for new region
+            inputState.Reset();
+            rainCycleController.Clear();
+            spectatorState.Reset();
 
             // Cleanup chaos manager for region reload
             ChaosManager?.Shutdown();
@@ -1092,63 +511,20 @@ namespace RainWorldWallpaperMod
 
         private void ForceImmediateLocationChange()
         {
-            if (preparingWorldReload || !spectatorPrepared || Game?.cameras == null || Game.cameras.Length == 0)
+            if (sessionState.IsPreparingWorldReload || !spectatorState.IsPrepared || Game?.cameras == null || Game.cameras.Length == 0)
             {
                 return;
             }
 
-            var camera = Game.cameras[0];
-            if (camera == null)
-            {
-                return;
-            }
-
-            if (isTransitioning)
-            {
-                transitionProgress = 1f;
-                CompleteTransition(camera);
-            }
-            else
-            {
-                StartTransitionToRandomRoom();
-                if (isTransitioning)
-                {
-                    transitionProgress = 1f;
-                    CompleteTransition(camera);
-                }
-            }
+            transitionController.ForceImmediateLocationChange(sessionState);
         }
-
-
-        private void ToggleSettingsMenu()
-        {
-            if (!hasInitializedSettingsOverlay)
-            {
-                TryInitializeSettingsOverlay(Game?.cameras != null && Game.cameras.Length > 0 ? Game.cameras[0] : null);
-            }
-
-            if (settingsOverlay == null)
-            {
-                return;
-            }
-
-            settingsMenuVisible = !settingsMenuVisible;
-            settingsOverlay.SetVisible(settingsMenuVisible);
-            settingsOverlay.Refresh();
-
-            if (settingsMenuVisible)
-            {
-                Hud?.RegisterUserActivity();
-            }
-        }
-
         public string CurrentRegionCode => currentRegionCode ?? string.Empty;
 
-        public string CurrentRoomName => currentRoomName;
+        public string CurrentRoomName => roomTracker.CurrentRoomName;
 
-        public string PreviousRoomName => previousRoomName;
+        public string PreviousRoomName => roomTracker.PreviousRoomName;
 
-        public string NextRoomName => nextRoomName;
+        public string NextRoomName => roomTracker.NextRoomName;
 
         public int RoomsExploredInRegion => RegionManager?.GetRoomsExplored() ?? 0;
 
@@ -1163,33 +539,24 @@ namespace RainWorldWallpaperMod
         /// <summary>
         /// Rain countdown timer - shows remaining seconds until region change (0 if not active)
         /// </summary>
-        public float RainCountdownRemaining => isRainCountdownActive ? (rainCountdownDuration - rainCountdownTimer) : 0f;
+        public float RainCountdownRemaining => rainCycleController.RainCountdownRemaining;
 
         /// <summary>
         /// Whether rain countdown is currently active
         /// </summary>
-        public bool IsRainCountdownActive => isRainCountdownActive;
+        public bool IsRainCountdownActive => rainCycleController.IsRainCountdownActive;
 
         /// <summary>
         /// Whether No Rain Wait mode is enabled
         /// </summary>
-        public bool IsNoRainWaitMode => WallpaperMod.Options?.NoRainTransition.Value ?? false;
+        public bool IsNoRainWaitMode => rainCycleController.IsNoRainWaitMode;
 
         /// <summary>
         /// Current rain cycle progress (0.0 to 1.0)
         /// </summary>
-        public float CycleProgress
-        {
-            get
-            {
-                if (Game?.world?.rainCycle == null) return 0f;
-                int cycleLength = Game.world.rainCycle.cycleLength;
-                if (cycleLength <= 0) return 0f;
-                return (float)Game.world.rainCycle.timer / cycleLength;
-            }
-        }
+        public float CycleProgress => rainCycleController.GetCycleProgress(Game);
 
-        public bool IsTransitioning => isTransitioning;
+        public bool IsTransitioning => sessionState.IsTransitioning;
 
         public RegionManager RegionMgr => RegionManager;
 
@@ -1217,10 +584,7 @@ namespace RainWorldWallpaperMod
         /// </summary>
         public void SetCameraMode(WallpaperModOptions.CameraMode mode)
         {
-            cameraMode = mode;
-            currentCameraPositionIndex = 0;
-            unvisitedPositions.Clear();
-            remainingJumps = 0;
+            roomTracker.SetCameraMode(mode);
             WallpaperMod.Log?.LogInfo($"WallpaperController: Camera mode set to {mode}");
         }
 
@@ -1231,8 +595,8 @@ namespace RainWorldWallpaperMod
         {
             isRoomLocked = !isRoomLocked;
             WallpaperMod.Log?.LogInfo($"WallpaperController: Room lock {(isRoomLocked ? "ON" : "OFF")}");
-            Hud?.RegisterUserActivity();
-            settingsOverlay?.Refresh();
+            uiController.RegisterUserActivity();
+            uiController.RefreshOverlay();
         }
 
         /// <summary>
@@ -1271,15 +635,13 @@ namespace RainWorldWallpaperMod
             WallpaperMod.Log?.LogInfo($"WallpaperController: Jumping to room {roomName}");
 
             // Force immediate transition to this room
-            if (isTransitioning)
+            if (sessionState.IsTransitioning)
             {
                 // Complete current transition first
-                transitionProgress = 1f;
+                sessionState.ForceCompleteTransition();
                 CompleteTransition(Game.cameras[0]);
             }
 
-            // Set up transition to target room
-            currentTargetRoom = targetRoom;
             StartTransitionToSpecificRoom(targetRoom);
         }
 
@@ -1290,26 +652,11 @@ namespace RainWorldWallpaperMod
         /// </summary>
         public void GoToPreviousRoom()
         {
-            if (roomHistory.Count < 2)
+            if (!roomTracker.TryPopPreviousRoom(out string previousRoomName))
             {
                 WallpaperMod.Log?.LogInfo("WallpaperController: No previous room in history");
                 return;
             }
-
-            // Current room is at index Count-1
-            // Previous room is at index Count-2
-            string previousRoomName = roomHistory[roomHistory.Count - 2];
-            
-            // Remove current room from history so we can go back "up" the stack
-            roomHistory.RemoveAt(roomHistory.Count - 1);
-            
-            // We also need to remove the previous room (which is now at Count-1) 
-            // because RequestRoomChange -> StartTransitionToSpecificRoom will add it back if it's not there?
-            // Actually, StartTransitionToSpecificRoom only adds if !Contains.
-            // Since it IS there, it won't add it.
-            // But we want to maintain the stack illusion. 
-            // If we just go to it, history becomes [..., Prev]. Current is gone.
-            // This is correct for a "Back" button.
             
             WallpaperMod.Log?.LogInfo($"WallpaperController: Going back to {previousRoomName}");
             RequestRoomChange(previousRoomName);
@@ -1334,80 +681,25 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            currentCameraPositionIndex = (currentCameraPositionIndex + direction) % totalPositions;
-            if (currentCameraPositionIndex < 0) currentCameraPositionIndex += totalPositions;
+            if (!roomTracker.TryCycleCameraPosition(totalPositions, direction, out int cameraIndex))
+            {
+                return;
+            }
 
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Cycling camera to position {currentCameraPositionIndex + 1}/{totalPositions}");
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Cycling camera to position {cameraIndex + 1}/{totalPositions}");
             
-            camera.MoveCamera(room, currentCameraPositionIndex);
+            camera.MoveCamera(room, cameraIndex);
             
             // Update target position so we don't drift back if transitioning
             // And update start position to avoid jumps
-            targetPosition = camera.pos;
-            startPosition = camera.pos;
+            transitionController.SyncManualCameraPosition(camera.pos);
             
-            Hud?.RegisterUserActivity();
+            uiController.RegisterUserActivity();
         }
 
-        /// <summary>
-        /// Select camera position based on current camera mode
-        /// </summary>
-        private int SelectCameraPosition(int availablePositions, bool isNewRoom)
+        private RoomCamera GetPrimaryCamera()
         {
-            if (availablePositions == 0) return 0;
-
-            switch (cameraMode)
-            {
-                case WallpaperModOptions.CameraMode.FirstOnly:
-                    return 0;
-
-                case WallpaperModOptions.CameraMode.Sequential:
-                    // Reset index when entering a new room
-                    if (isNewRoom)
-                    {
-                        currentCameraPositionIndex = 0;
-                    }
-                    else
-                    {
-                        currentCameraPositionIndex = (currentCameraPositionIndex + 1) % availablePositions;
-                    }
-                    return currentCameraPositionIndex;
-
-                case WallpaperModOptions.CameraMode.RandomExploration:
-                    if (isNewRoom)
-                    {
-                        // Entering new room: initialize unvisited positions and pick random start + jump count
-                        unvisitedPositions.Clear();
-                        for (int i = 0; i < availablePositions; i++)
-                        {
-                            unvisitedPositions.Add(i);
-                        }
-
-                        // Pick random start position
-                        int startIndex = random.Next(unvisitedPositions.Count);
-                        currentCameraPositionIndex = unvisitedPositions[startIndex];
-                        unvisitedPositions.RemoveAt(startIndex);
-
-                        // Decide how many more jumps to make (0 to remaining positions)
-                        remainingJumps = unvisitedPositions.Count > 0 ? random.Next(unvisitedPositions.Count + 1) : 0;
-                    }
-                    else
-                    {
-                        // Staying in room: pick random from unvisited positions
-                        if (unvisitedPositions.Count > 0)
-                        {
-                            int randomIndex = random.Next(unvisitedPositions.Count);
-                            currentCameraPositionIndex = unvisitedPositions[randomIndex];
-                            unvisitedPositions.RemoveAt(randomIndex);
-                            remainingJumps--;
-                        }
-                    }
-                    return currentCameraPositionIndex;
-
-                case WallpaperModOptions.CameraMode.Random:
-                default:
-                    return random.Next(availablePositions);
-            }
+            return Game?.cameras != null && Game.cameras.Length > 0 ? Game.cameras[0] : null;
         }
     }
 }
