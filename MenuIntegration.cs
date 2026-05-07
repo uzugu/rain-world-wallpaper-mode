@@ -13,6 +13,7 @@ namespace RainWorldWallpaperMod
     public static class MenuIntegration
     {
         private static Menu.SimpleButton wallpaperButton;
+        private static MainMenu pendingAutoLaunchMenu;
         private static bool initialized;
 
         public static void Initialize()
@@ -24,6 +25,7 @@ namespace RainWorldWallpaperMod
 
             // Hook into MainMenu constructor and signal handler
             On.Menu.MainMenu.ctor += MainMenu_ctor;
+            On.Menu.MainMenu.Update += MainMenu_Update;
             On.Menu.MainMenu.Singal += MainMenu_Singal;
 
             initialized = true;
@@ -42,6 +44,32 @@ namespace RainWorldWallpaperMod
             catch (Exception ex)
             {
                 WallpaperMod.Log?.LogError($"MenuIntegration: Failed to add button - {ex}");
+            }
+
+            if (WallpaperMod.Instance?.HasPendingAutoLaunchRequest() == true)
+            {
+                pendingAutoLaunchMenu = self;
+            }
+        }
+
+        private static void MainMenu_Update(On.Menu.MainMenu.orig_Update orig, MainMenu self)
+        {
+            orig(self);
+
+            if (!ReferenceEquals(self, pendingAutoLaunchMenu))
+            {
+                return;
+            }
+
+            pendingAutoLaunchMenu = null;
+
+            try
+            {
+                WallpaperMod.Instance?.TryAutoLaunchFromMainMenu(self.manager);
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogError($"MenuIntegration: Failed to auto-launch wallpaper mode - {ex}");
             }
         }
 
@@ -123,7 +151,9 @@ namespace RainWorldWallpaperMod
             }
 
             On.Menu.MainMenu.ctor -= MainMenu_ctor;
+            On.Menu.MainMenu.Update -= MainMenu_Update;
             On.Menu.MainMenu.Singal -= MainMenu_Singal;
+            pendingAutoLaunchMenu = null;
             initialized = false;
         }
 

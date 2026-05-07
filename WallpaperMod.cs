@@ -15,8 +15,12 @@ namespace RainWorldWallpaperMod
         public static WallpaperModOptions Options;
 
         private bool pendingWallpaperLaunch;
+        private bool autoLaunchWallpaperRequested;
+        private bool autoLaunchWallpaperConsumed;
         private WallpaperController activeController;
         private string requestedStartRegion = "SU";
+        private string commandLineStartRegion;
+        private string commandLineCampaign;
 
         private static readonly Dictionary<string, string> RegionStartRooms = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -49,6 +53,8 @@ namespace RainWorldWallpaperMod
             Instance = this;
             Log = Logger;
             Log?.LogInfo("Rain World Wallpaper Mod V2.0 loaded!");
+
+            ParseCommandLineArguments();
 
             // Don't initialize options here - wait for OnModsInit
             // Options will be created by Remix when needed
@@ -95,6 +101,23 @@ namespace RainWorldWallpaperMod
 
             Log?.LogInfo($"Wallpaper mode requested from menu, switching to game process in region {requestedStartRegion}");
             manager.RequestMainProcessSwitch(ProcessManager.ProcessID.Game);
+        }
+
+        internal void TryAutoLaunchFromMainMenu(ProcessManager manager)
+        {
+            if (!autoLaunchWallpaperRequested || autoLaunchWallpaperConsumed || manager == null || pendingWallpaperLaunch)
+            {
+                return;
+            }
+
+            autoLaunchWallpaperConsumed = true;
+            Log?.LogInfo("Auto-launching wallpaper mode from command line arguments");
+            BeginWallpaperMode(manager);
+        }
+
+        internal bool HasPendingAutoLaunchRequest()
+        {
+            return autoLaunchWallpaperRequested && !autoLaunchWallpaperConsumed && !pendingWallpaperLaunch;
         }
 
         private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -360,6 +383,12 @@ namespace RainWorldWallpaperMod
 
         private string ResolveInitialRegion()
         {
+            if (!string.IsNullOrEmpty(commandLineStartRegion))
+            {
+                Log?.LogInfo($"ResolveInitialRegion: Using command-line region override '{commandLineStartRegion}'");
+                return commandLineStartRegion;
+            }
+
             // Try to use the config value first
             if (Options != null)
             {
@@ -373,12 +402,148 @@ namespace RainWorldWallpaperMod
 
         private SlugcatStats.Name ResolveSlugcatName()
         {
+            if (!string.IsNullOrEmpty(commandLineCampaign))
+            {
+                return WallpaperModOptions.GetSlugcatName(commandLineCampaign);
+            }
+
             // Use the selected campaign from config, fallback to White/Survivor
             if (Options != null)
             {
                 return WallpaperModOptions.GetSlugcatName(Options.SelectedCampaign.Value);
             }
             return SlugcatStats.Name.White;
+        }
+
+        private void ParseCommandLineArguments()
+        {
+            string[] args;
+
+            try
+            {
+                args = Environment.GetCommandLineArgs();
+            }
+            catch (Exception ex)
+            {
+                Log?.LogWarning($"Failed to read command-line arguments: {ex.Message}");
+                return;
+            }
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                string current = args[i];
+                if (string.IsNullOrWhiteSpace(current))
+                {
+                    continue;
+                }
+
+                string flag = current.Trim();
+                string inlineValue = null;
+                int separatorIndex = flag.IndexOf('=');
+
+                if (separatorIndex > 0)
+                {
+                    inlineValue = flag.Substring(separatorIndex + 1);
+                    flag = flag.Substring(0, separatorIndex);
+                }
+
+                switch (flag.ToLowerInvariant())
+                {
+                    case "-wallpaper":
+                    case "--wallpaper":
+                    case "-wallpapermode":
+                    case "--wallpapermode":
+                    case "--wallpaper-mode":
+                    case "-wallpaperengine":
+                    case "--wallpaperengine":
+                    case "--wallpaper-engine":
+                        autoLaunchWallpaperRequested = true;
+                        break;
+
+                    case "--wallpaper-region":
+                    case "--wallpaper-start-region":
+                        commandLineStartRegion = ParseRegionOverride(inlineValue ?? TryReadArgumentValue(args, ref i));
+                        autoLaunchWallpaperRequested = true;
+                        break;
+
+                    case "--wallpaper-campaign":
+                    case "--wallpaper-slugcat":
+                        commandLineCampaign = ParseCampaignOverride(inlineValue ?? TryReadArgumentValue(args, ref i));
+                        autoLaunchWallpaperRequested = true;
+                        break;
+                }
+            }
+
+            if (!autoLaunchWallpaperRequested)
+            {
+                return;
+            }
+
+            Log?.LogInfo(
+                $"Wallpaper auto-launch enabled. Region override: {commandLineStartRegion ?? "<config>"}, " +
+                $"campaign override: {commandLineCampaign ?? "<config>"}");
+        }
+
+        private string ParseRegionOverride(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                Log?.LogWarning("Ignoring empty wallpaper region override");
+                return null;
+            }
+
+            string normalized = value.Trim().Trim('"');
+
+            if (Enum.TryParse(normalized, true, out WallpaperModOptions.RegionChoice regionChoice))
+            {
+                return regionChoice.ToString();
+            }
+
+            normalized = normalized.ToUpperInvariant();
+            if (RegionStartRooms.ContainsKey(normalized))
+            {
+                return normalized;
+            }
+
+            Log?.LogWarning($"Ignoring unknown wallpaper region override '{value}'");
+            return null;
+        }
+
+        private string ParseCampaignOverride(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                Log?.LogWarning("Ignoring empty wallpaper campaign override");
+                return null;
+            }
+
+            string normalized = value.Trim().Trim('"');
+
+            if (Enum.TryParse(normalized, true, out WallpaperModOptions.CampaignChoice campaignChoice))
+            {
+                return campaignChoice.ToString();
+            }
+
+            Log?.LogWarning($"Ignoring unknown wallpaper campaign override '{value}'");
+            return null;
+        }
+
+        private static string TryReadArgumentValue(string[] args, ref int index)
+        {
+            int nextIndex = index + 1;
+            if (nextIndex >= args.Length)
+            {
+                return null;
+            }
+
+            string nextValue = args[nextIndex];
+            if (string.IsNullOrWhiteSpace(nextValue) || nextValue.StartsWith("-", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            index = nextIndex;
+            return nextValue;
         }
     }
 }

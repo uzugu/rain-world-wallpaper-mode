@@ -25,6 +25,25 @@ Rain World Wallpaper Mode turns Rain World into a hands-free animated wallpaper.
 
 For the full control reference, see `HOW_TO_USE.md`.
 
+## Wallpaper Engine
+
+The integration path is to run Rain World as an application wallpaper while this mod is installed and enabled.
+
+Recommended launch arguments:
+
+```text
+--wallpaper --wallpaper-region SU --wallpaper-campaign White
+```
+
+Notes:
+
+- `--wallpaper` boots straight into wallpaper mode with no menu click.
+- `--wallpaper-region <code>` overrides the starting region for that launch only.
+- `--wallpaper-campaign <name>` overrides the campaign for that launch only.
+- The auto-launch is one-shot per process, so returning to the main menu does not immediately relaunch wallpaper mode.
+
+For setup details, see `WALLPAPER_ENGINE.md`.
+
 ## Controls
 
 | Key | Action |
@@ -135,6 +154,7 @@ The overlay exposes the live wallpaper session:
 
 - `HOW_TO_USE.md`: current user guide
 - `ARCHITECTURE.md`: file map and runtime architecture
+- `WALLPAPER_ENGINE.md`: external-app wallpaper setup and launch arguments
 - `WORKSHOP_PUBLISHING.md`: publishing checklist for Steam Workshop
 - `DESIGN.md`: historical design/planning document
 
