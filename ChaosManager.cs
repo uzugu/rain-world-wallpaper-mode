@@ -35,18 +35,19 @@ namespace RainWorldWallpaperMod
 
         // Spawn timing by chaos level (1-10)
         // Format: (normal interval, max creatures, ramp-up interval)
+        // Balanced levels (5-7) recommended for performance stability
         private static readonly Dictionary<int, (float interval, int maxCreatures, float rampUpInterval)> ChaosLevels = new Dictionary<int, (float, int, float)>
         {
-            { 1, (45f, 50, 10f) },    // Level 1: Controlled chaos - ramp up every 10s
-            { 2, (40f, 70, 9f) },     // Level 2: Getting busy - ramp up every 9s
-            { 3, (35f, 90, 8f) },     // Level 3: Very active - ramp up every 8s
-            { 4, (30f, 110, 7f) },    // Level 4: Intense - ramp up every 7s
-            { 5, (25f, 130, 6f) },    // Level 5: Overwhelming - ramp up every 6s
-            { 6, (20f, 150, 5f) },    // Level 6: Extreme - ramp up every 5s
-            { 7, (15f, 175, 4f) },    // Level 7: Insane - ramp up every 4s
-            { 8, (12f, 200, 3f) },    // Level 8: Mayhem - ramp up every 3s
-            { 9, (10f, 225, 2f) },    // Level 9: Apocalyptic - ramp up every 2s
-            { 10, (8f, 250, 1f) }     // Level 10: ABSOLUTE CHAOS - ramp up every 1s!
+            { 1, (45f, 5, 10f) },     // Level 1: Minimal - 5 creatures max
+            { 2, (40f, 8, 9f) },      // Level 2: Light - 8 creatures max
+            { 3, (35f, 12, 8f) },     // Level 3: Moderate - 12 creatures max
+            { 4, (30f, 18, 7f) },     // Level 4: Active - 18 creatures max
+            { 5, (25f, 25, 6f) },     // Level 5: Balanced starting point - 25 creatures max
+            { 6, (20f, 35, 5f) },     // Level 6: Getting busy - 35 creatures max
+            { 7, (15f, 50, 4f) },     // Level 7: Maximum recommended - 50 creatures max
+            { 8, (12f, 70, 3f) },     // Level 8: Heavy - 70 creatures max (may lag)
+            { 9, (10f, 100, 2f) },    // Level 9: Extreme - 100 creatures max (risky)
+            { 10, (8f, 150, 1f) }     // Level 10: ABSOLUTE CHAOS - 150 creatures max (very risky)
         };
 
         private float rampUpInterval = 10f; // Fast spawn interval for first half
@@ -723,7 +724,8 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
-        /// Equip scavengers with random weapons and items
+        /// Equip scavengers with random weapons and items using proper PlacedObject-linked spawn path
+        /// Dual approach: scan camera room for ScavengerTreasury entries, fallback to constructed PlacedObject
         /// </summary>
         private void EquipScavenger(AbstractCreature abstractCreature)
         {
@@ -735,6 +737,13 @@ namespace RainWorldWallpaperMod
             var scavenger = abstractCreature.realizedCreature as Scavenger;
             if (scavenger == null)
             {
+                return;
+            }
+
+            // Must be in a realized room for proper item spawning
+            if (scavenger.room == null || scavenger.room.roomSettings == null)
+            {
+                WallpaperMod.Log?.LogWarning($"ChaosManager: Cannot equip scavenger — no room context");
                 return;
             }
 
@@ -757,130 +766,179 @@ namespace RainWorldWallpaperMod
 
                 for (int i = 0; i < numItems; i++)
                 {
-                    var entityID = new EntityID(-1, random.Next(100000));
-                    AbstractPhysicalObject abstractItem = null;
-
-                    int itemChoice = random.Next(100);
-
+                    // Determine weapon type
+                    AbstractPhysicalObject.AbstractObjectType targetType;
                     if (isKing)
                     {
-                        // ScavengerKing: 50% explosive spear, 30% spear, 20% rock
-                        if (itemChoice < 50)
-                        {
-                            // Explosive spear
-                            abstractItem = new AbstractSpear(
-                                game.world,
-                                null,
-                                abstractCreature.pos,
-                                entityID,
-                                true,  // explosive!
-                                false
-                            );
-                        }
-                        else if (itemChoice < 80)
-                        {
-                            // Regular spear
-                            abstractItem = new AbstractSpear(
-                                game.world,
-                                null,
-                                abstractCreature.pos,
-                                entityID,
-                                false,
-                                false
-                            );
-                        }
+                        int kingChoice = random.Next(100);
+                        if (kingChoice < 50)
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Spear; // explosive
+                        else if (kingChoice < 80)
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Spear; // regular
                         else
-                        {
-                            // Rock
-                            abstractItem = new AbstractPhysicalObject(
-                                game.world,
-                                AbstractPhysicalObject.AbstractObjectType.Rock,
-                                null,
-                                abstractCreature.pos,
-                                entityID
-                            );
-                        }
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Rock;
                     }
                     else
                     {
-                        // Regular Scavenger: 40% spear, 25% explosive spear, 20% grenade, 10% rock, 5% extra grenade
-                        if (itemChoice < 40)
-                        {
-                            // Regular spear
-                            abstractItem = new AbstractSpear(
-                                game.world,
-                                null,
-                                abstractCreature.pos,
-                                entityID,
-                                false,
-                                false
-                            );
-                        }
-                        else if (itemChoice < 65)
-                        {
-                            // Explosive spear
-                            abstractItem = new AbstractSpear(
-                                game.world,
-                                null,
-                                abstractCreature.pos,
-                                entityID,
-                                true,  // explosive!
-                                false
-                            );
-                        }
-                        else if (itemChoice < 90)
-                        {
-                            // Grenade (ScavengerBomb) - 25% total chance (20% + 5% instead of singularity bomb)
-                            abstractItem = new AbstractPhysicalObject(
-                                game.world,
-                                AbstractPhysicalObject.AbstractObjectType.ScavengerBomb,
-                                null,
-                                abstractCreature.pos,
-                                entityID
-                            );
-                        }
+                        int regularChoice = random.Next(100);
+                        if (regularChoice < 40)
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Spear; // regular
+                        else if (regularChoice < 65)
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Spear; // explosive
+                        else if (regularChoice < 90)
+                            targetType = AbstractPhysicalObject.AbstractObjectType.ScavengerBomb;
                         else
-                        {
-                            // Rock
-                            abstractItem = new AbstractPhysicalObject(
-                                game.world,
-                                AbstractPhysicalObject.AbstractObjectType.Rock,
-                                null,
-                                abstractCreature.pos,
-                                entityID
-                            );
-                        }
+                            targetType = AbstractPhysicalObject.AbstractObjectType.Rock;
                     }
 
-                    if (abstractItem != null)
+                    // APPROACH A: Scan camera room's placedObjects for ScavengerTreasury entries
+                    PlacedObject treasuryEntry = null;
+                    if (game?.cameras != null && game.cameras.Length > 0 && game.cameras[0]?.room != null)
                     {
-                        scavenger.room.abstractRoom.AddEntity(abstractItem);
-                        abstractItem.RealizeInRoom();
-
-                        // Try to give item to scavenger using Grab method
-                        if (abstractItem.realizedObject != null && scavenger.grasps != null)
+                        var cameraRoom = game.cameras[0].room;
+                        if (cameraRoom?.roomSettings?.placedObjects != null)
                         {
-                            for (int graspIndex = 0; graspIndex < scavenger.grasps.Length; graspIndex++)
+                            foreach (var placedObj in cameraRoom.roomSettings.placedObjects)
                             {
-                                if (scavenger.grasps[graspIndex] == null)
+                                if (placedObj.type == PlacedObject.Type.ScavengerTreasury)
                                 {
-                                    scavenger.Grab(abstractItem.realizedObject, graspIndex, 0, Creature.Grasp.Shareability.CanNotShare, 1f, false, false);
+                                    treasuryEntry = placedObj;
+                                    WallpaperMod.Log?.LogInfo($"ChaosManager: Found ScavengerTreasury in camera room {cameraRoom.abstractRoom.name}");
                                     break;
                                 }
                             }
                         }
                     }
-                }
 
-                if (isKing)
-                {
-                    WallpaperMod.Log?.LogInfo($"ChaosManager: 👑 Equipped ScavengerKing with elite gear!");
+                    AbstractPhysicalObject abstractItem = null;
+                    if (treasuryEntry != null && treasuryEntry.data != null)
+                    {
+                        // Use existing ScavengerTreasury data to spawn with proper PlacedObject link
+                        var multiplayerData = new PlacedObject.MultiplayerItemData(null);
+                        multiplayerData.type = new PlacedObject.MultiplayerItemData.Type(targetType.ToString(), register: false);
+                        multiplayerData.chance = 1f;
+
+                        var newPlacedObj = new PlacedObject(PlacedObject.Type.MultiplayerItem, multiplayerData);
+                        newPlacedObj.pos = treasuryEntry.pos;
+
+                        // Spawn the item through the room's infrastructure
+                        abstractItem = SpawnItemFromPlacedObject(newPlacedObj, scavenger.room);
+                    }
+                    else
+                    {
+                        // APPROACH B: Construct PlacedObject with MultiplayerItemData from scratch
+                        var multiplayerData = new PlacedObject.MultiplayerItemData(null);
+                        multiplayerData.type = new PlacedObject.MultiplayerItemData.Type(targetType.ToString(), register: false);
+                        multiplayerData.chance = 1f;
+
+                        var newPlacedObj = new PlacedObject(PlacedObject.Type.MultiplayerItem, multiplayerData);
+
+                        // Find a valid position in the room
+                        newPlacedObj.pos = Vector2.zero;
+
+                        // Spawn the item through the room's infrastructure
+                        abstractItem = SpawnItemFromPlacedObject(newPlacedObj, scavenger.room);
+                    }
+
+                    // CRITICAL: Wait for item to be fully realized before attempting Grab
+                    if (abstractItem != null && abstractItem.realizedObject != null)
+                    {
+                        var realizedItem = abstractItem.realizedObject as PhysicalObject;
+                        if (realizedItem != null && realizedItem.room == scavenger.room)
+                        {
+                            TryGrabItemToScavenger(scavenger, realizedItem);
+                        }
+                        else if (realizedItem != null)
+                        {
+                            WallpaperMod.Log?.LogWarning($"ChaosManager: Item realized in wrong room, attempting reposition");
+                        }
+                    }
                 }
             }
             catch (System.Exception ex)
             {
                 WallpaperMod.Log?.LogError($"ChaosManager: Failed to equip scavenger: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Spawn an item from a PlacedObject using the proper spawn path
+        /// Mirrors the Arena's SpawnMultiplayerItem flow: reads MultiplayerItemData.type to determine AbstractObjectType
+        /// </summary>
+        private AbstractPhysicalObject SpawnItemFromPlacedObject(PlacedObject placedObj, Room room)
+        {
+            if (placedObj.data == null)
+            {
+                WallpaperMod.Log?.LogError($"ChaosManager: PlacedObject has no data!");
+                return null;
+            }
+
+            var multiData = placedObj.data as PlacedObject.MultiplayerItemData;
+            if (multiData == null)
+            {
+                WallpaperMod.Log?.LogError($"ChaosManager: PlacedObject data is not MultiplayerItemData!");
+                return null;
+            }
+
+            AbstractPhysicalObject abstractItem = null;
+            var entityID = new EntityID(-1, new System.Random().Next(100000));
+            var spawnPos = room.GetWorldCoordinate(placedObj.pos);
+
+            // Map MultiplayerItemData.Type to AbstractObjectType (same as Arena's SpawnMultiplayerItem)
+            var typeStr = multiData.type.ToString();
+
+            if (typeStr == "Spear")
+            {
+                abstractItem = new AbstractSpear(game.world, null, spawnPos, entityID, false);
+            }
+            else if (typeStr == "ExplosiveSpear")
+            {
+                abstractItem = new AbstractSpear(game.world, null, spawnPos, entityID, true);
+            }
+            else if (typeStr == "Bomb")
+            {
+                abstractItem = new AbstractPhysicalObject(game.world, AbstractPhysicalObject.AbstractObjectType.ScavengerBomb, null, spawnPos, entityID);
+            }
+            else if (typeStr == "Rock")
+            {
+                abstractItem = new AbstractPhysicalObject(game.world, AbstractPhysicalObject.AbstractObjectType.Rock, null, spawnPos, entityID);
+            }
+            else
+            {
+                WallpaperMod.Log?.LogError($"ChaosManager: Unknown MultiplayerItemData.Type: {typeStr}");
+                return null;
+            }
+
+            // Add to abstract room and realize
+            if (room.abstractRoom != null)
+            {
+                room.abstractRoom.entities.Add(abstractItem);
+            }
+
+            return abstractItem;
+        }
+
+        /// <summary>
+        /// Grab an item to a scavenger with proper timing — waits for item to be fully realized
+        /// </summary>
+        private void TryGrabItemToScavenger(Scavenger scavenger, PhysicalObject item)
+        {
+            if (scavenger.grasps == null)
+            {
+                return;
+            }
+
+            // Find an empty grasp slot
+            for (int graspIndex = 0; graspIndex < scavenger.grasps.Length; graspIndex++)
+            {
+                if (scavenger.grasps[graspIndex] == null)
+                {
+                    scavenger.Grab(item, graspIndex, 0, Creature.Grasp.Shareability.CanNotShare, 1f, false, false);
+                    return;
+                }
+            }
+
+            WallpaperMod.Log?.LogWarning($"ChaosManager: No empty grasp slots for scavenger");
         }
 
         // Public properties for UI
