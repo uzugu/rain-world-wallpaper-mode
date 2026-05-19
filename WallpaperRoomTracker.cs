@@ -234,5 +234,19 @@ namespace RainWorldWallpaperMod
             cameraIndex = currentCameraPositionIndex;
             return true;
         }
+
+        private bool hasNewRoomFlag = false;
+
+        public bool HasNewRoomSinceLastCheck()
+        {
+            bool result = hasNewRoomFlag;
+            hasNewRoomFlag = false;
+            return result;
+        }
+
+        public void MarkNewRoom()
+        {
+            hasNewRoomFlag = true;
+        }
     }
 }

@@ -21,7 +21,8 @@ namespace RainWorldWallpaperMod
             Artificer,  // Downpour
             Rivulet,    // Downpour
             Spearmaster,// Downpour
-            Saint       // Downpour
+            Saint,      // Downpour
+            Watcher     // The Watcher campaign
         }
 
         public enum RegionChoice
@@ -38,14 +39,44 @@ namespace RainWorldWallpaperMod
             UW,  // The Exterior
             SS,  // Five Pebbles
             SB,  // Subterranean
-            LM,  // Looks to the Moon (Downpour)
-            RM,  // Waterfront Facility (Downpour)
-            DM,  // Metropolis (Downpour)
-            LC,  // Outer Expanse (Downpour)
+            LM,  // Waterfront Facility (Downpour)
+            RM,  // The Rot (Downpour)
+            DM,  // Looks to the Moon (Downpour)
+            LC,  // Metropolis (Downpour)
             MS,  // Submerged Superstructure (Downpour)
             VS,  // Pipeyard (Downpour)
-            CL,  // The Rot (Downpour)
-            OE   // Rubicon (Downpour)
+            CL,  // Silent Construct (Downpour)
+            OE,  // Outer Expanse (Downpour)
+            WVWA,
+            WVWB,
+            WRRA,
+            WPGA,
+            WARA,
+            WARB,
+            WARC,
+            WARD,
+            WARE,
+            WARF,
+            WARG,
+            WMPA,
+            WAUA,
+            WBLA,
+            WPTA,
+            WRFA,
+            WRFB,
+            WRSA,
+            WSKA,
+            WSKB,
+            WSKC,
+            WSKD,
+            WTDA,
+            WTDB,
+            WORA,
+            WDSR,
+            WGWR,
+            WHIR,
+            WSSR,
+            WSUR
         }
 
         public enum CameraMode
@@ -54,6 +85,14 @@ namespace RainWorldWallpaperMod
             Random,             // Pick one random camera position
             Sequential,         // Cycle through all camera positions
             FirstOnly           // Always use first camera position
+        }
+
+        public enum RotState
+        {
+            Natural,    // Session-generated Watcher-style mixed rot progression
+            Normal,     // Clean world, no rot effects (like WMPA)
+            Rotted,     // Sentient Rot Spores active, incremental progression
+            Karma       // Karma flowers everywhere, FlowerWind active (like WORA)
         }
 
         // Configuration values
@@ -71,6 +110,7 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<bool> NoRainTransition;
         public readonly Configurable<int> RainCountdownMin;
         public readonly Configurable<int> RainCountdownMax;
+        public readonly Configurable<string> RotStateConfig;
 
         public WallpaperModOptions()
         {
@@ -89,6 +129,7 @@ namespace RainWorldWallpaperMod
             NoRainTransition = config.Bind("noRainTransition", false);
             RainCountdownMin = config.Bind("rainCountdownMin", 60);
             RainCountdownMax = config.Bind("rainCountdownMax", 180);
+            RotStateConfig = config.Bind("rotState", RotState.Natural.ToString());
         }
 
         public override void Initialize()
@@ -184,6 +225,11 @@ namespace RainWorldWallpaperMod
                 uiElements.Add(hudFadeDelayBox);
                 rightYPos -= lineHeight;
 
+                // Watcher State label (dropdown added later)
+                float rotStateYPos = rightYPos;
+                uiElements.Add(new OpLabel(rightColumnLabel, rotStateYPos, "Watcher State:"));
+                rightYPos -= lineHeight;
+
                 // Enable Chaos
                 OpCheckBox enableChaosBox = new OpCheckBox(EnableChaos, new Vector2(rightColumnControl, rightYPos));
                 enableChaosBox.description = "If enabled, spawns creatures to create a more lively environment (may cause instability)";
@@ -215,16 +261,8 @@ namespace RainWorldWallpaperMod
                 float bottomYPos = Mathf.Min(leftYPos, rightYPos) - lineHeight * 0.5f;
 
                 // Control hints
-                uiElements.Add(new OpLabel(leftColumnLabel, bottomYPos, "In-Game Controls:", bigText: false));
-                bottomYPos -= 30f;
-
-                uiElements.Add(new OpLabelLong(new Vector2(leftColumnLabel, bottomYPos - 100f), new Vector2(500f, 100f),
-                    "Right/D - Next Room | Left/A - Previous Room | Up/Down - Camera\\n" +
-                    "L - Lock Room | G - Next Region | B - Previous Region\\n" +
-                    "H - Toggle HUD Always Visible\\n" +
-                    "F1/Tab - Settings Overlay | Escape - Return to Menu")
+                uiElements.Add(new OpLabel(leftColumnLabel, bottomYPos, "In-game controls: F1/Tab opens the live overlay.", bigText: false)
                 {
-                    verticalAlignment = OpLabel.LabelVAlignment.Top,
                     color = new Color(0.7f, 0.85f, 1f, 0.85f)
                 });
 
@@ -268,8 +306,20 @@ namespace RainWorldWallpaperMod
                 ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
                 cameraModeDropdown.description = "How to select camera positions in large rooms";
 
+                var rotStateDropdown = new OpComboBox(
+                    RotStateConfig,
+                    new Vector2(rightColumnControl, rotStateYPos - 5f),
+                    140f,
+                    OpResourceSelector.GetEnumNames(null, typeof(RotState)).Select(li =>
+                    {
+                        li.displayName = GetRotStateDisplayName(li.name);
+                        return li;
+                    }).ToList()
+                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
+                rotStateDropdown.description = "Watcher environmental state: Natural Mix, Clean, Rotted, or Karma Flowers";
+
                 // Add dropdowns last to ensure they render on top
-                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown });
+                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown, rotStateDropdown });
 
                 WallpaperMod.Log?.LogInfo("WallpaperModOptions: UI initialized successfully");
             }
@@ -291,6 +341,7 @@ namespace RainWorldWallpaperMod
                 case "Rivulet": return "Rivulet (DP)";
                 case "Spearmaster": return "Spearmaster (DP)";
                 case "Saint": return "Saint (DP)";
+                case "Watcher": return "Watcher";
                 default: return enumName;
             }
         }
@@ -299,27 +350,48 @@ namespace RainWorldWallpaperMod
         {
             switch (enumName)
             {
-                case "SU": return "Outskirts";
-                case "HI": return "Industrial Complex";
-                case "CC": return "Chimney Canopy";
-                case "GW": return "Garbage Wastes";
-                case "SH": return "Shaded Citadel";
-                case "DS": return "Drainage System";
-                case "SL": return "Shoreline";
-                case "SI": return "Sky Islands";
-                case "LF": return "Farm Arrays";
-                case "UW": return "The Exterior";
-                case "SS": return "Five Pebbles";
-                case "SB": return "Subterranean";
-                case "LM": return "Looks to the Moon (DP)";
-                case "RM": return "Waterfront Facility (DP)";
-                case "DM": return "Metropolis (DP)";
-                case "LC": return "Outer Expanse (DP)";
-                case "MS": return "Submerged Superstructure (DP)";
-                case "VS": return "Pipeyard (DP)";
-                case "CL": return "The Rot (DP)";
-                case "OE": return "Rubicon (DP)";
-                default: return enumName;
+                case "LM":
+                case "RM":
+                case "DM":
+                case "LC":
+                case "MS":
+                case "VS":
+                case "CL":
+                case "OE":
+                    return WallpaperRegionCatalog.GetDisplayName(enumName) + " (DP)";
+                case "WVWA":
+                case "WVWB":
+                case "WRRA":
+                case "WPGA":
+                case "WARA":
+                case "WARB":
+                case "WARC":
+                case "WARD":
+                case "WARE":
+                case "WARF":
+                case "WARG":
+                case "WMPA":
+                case "WAUA":
+                case "WBLA":
+                case "WPTA":
+                case "WRFA":
+                case "WRFB":
+                case "WRSA":
+                case "WSKA":
+                case "WSKB":
+                case "WSKC":
+                case "WSKD":
+                case "WTDA":
+                case "WTDB":
+                case "WORA":
+                case "WDSR":
+                case "WGWR":
+                case "WHIR":
+                case "WSSR":
+                case "WSUR":
+                    return WallpaperRegionCatalog.GetDisplayName(enumName) + " (Watcher)";
+                default:
+                    return WallpaperRegionCatalog.GetDisplayName(enumName);
             }
         }
 
@@ -371,6 +443,18 @@ namespace RainWorldWallpaperMod
             // Ensure min <= max
             if (RainCountdownMin.Value > RainCountdownMax.Value)
                 RainCountdownMin.Value = RainCountdownMax.Value;
+
+            string inferredCampaign = WallpaperRegionCatalog.InferCampaignForRegion(StartRegion.Value, SelectedCampaign.Value);
+            if (!string.Equals(SelectedCampaign.Value, inferredCampaign, StringComparison.OrdinalIgnoreCase))
+                SelectedCampaign.Value = inferredCampaign;
+
+            if (!string.Equals(SelectedCampaign.Value, CampaignChoice.Watcher.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(RotStateConfig.Value, RotState.Natural.ToString(), StringComparison.OrdinalIgnoreCase))
+                RotStateConfig.Value = RotState.Natural.ToString();
+
+            string normalizedRegion = WallpaperRegionCatalog.NormalizeRegionForCampaign(StartRegion.Value, SelectedCampaign.Value);
+            if (!string.Equals(StartRegion.Value, normalizedRegion, StringComparison.OrdinalIgnoreCase))
+                StartRegion.Value = normalizedRegion;
         }
 
         // Helper method to convert campaign string to SlugcatStats.Name
@@ -386,12 +470,13 @@ namespace RainWorldWallpaperMod
                 case CampaignChoice.White: return SlugcatStats.Name.White;
                 case CampaignChoice.Yellow: return SlugcatStats.Name.Yellow;
                 case CampaignChoice.Red: return SlugcatStats.Name.Red;
-                // Downpour slugcats - these require ModManager.MSC check
-                case CampaignChoice.Gourmand: return new SlugcatStats.Name("Gourmand", false);
-                case CampaignChoice.Artificer: return new SlugcatStats.Name("Artificer", false);
-                case CampaignChoice.Rivulet: return new SlugcatStats.Name("Rivulet", false);
-                case CampaignChoice.Spearmaster: return new SlugcatStats.Name("Spearmaster", false);
-                case CampaignChoice.Saint: return new SlugcatStats.Name("Saint", false);
+                // Downpour and Watcher slugcats are guarded so Workshop installs without those DLCs still load.
+                case CampaignChoice.Gourmand: return ModCompatibility.IsDownpourEnabled ? new SlugcatStats.Name("Gourmand", false) : SlugcatStats.Name.White;
+                case CampaignChoice.Artificer: return ModCompatibility.IsDownpourEnabled ? new SlugcatStats.Name("Artificer", false) : SlugcatStats.Name.White;
+                case CampaignChoice.Rivulet: return ModCompatibility.IsDownpourEnabled ? new SlugcatStats.Name("Rivulet", false) : SlugcatStats.Name.White;
+                case CampaignChoice.Spearmaster: return ModCompatibility.IsDownpourEnabled ? new SlugcatStats.Name("Spearmaster", false) : SlugcatStats.Name.White;
+                case CampaignChoice.Saint: return ModCompatibility.IsDownpourEnabled ? new SlugcatStats.Name("Saint", false) : SlugcatStats.Name.White;
+                case CampaignChoice.Watcher: return ModCompatibility.IsWatcherEnabled ? new SlugcatStats.Name("Watcher", false) : SlugcatStats.Name.White;
                 default: return SlugcatStats.Name.White;
             }
         }
@@ -425,6 +510,28 @@ namespace RainWorldWallpaperMod
                 case "Random": return "Single Random";
                 case "Sequential": return "All Positions";
                 case "FirstOnly": return "First Only";
+                default: return enumName;
+            }
+        }
+
+        // Helper method to convert rot state string to enum
+        public static WallpaperModOptions.RotState GetRotState(string stateStr)
+        {
+            if (Enum.TryParse<WallpaperModOptions.RotState>(stateStr, out var state))
+            {
+                return state;
+            }
+            return WallpaperModOptions.RotState.Natural;
+        }
+
+        private string GetRotStateDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "Natural": return "Natural Mix";
+                case "Normal": return "Clean";
+                case "Rotted": return "Rotted (Rot Spread)";
+                case "Karma": return "Karma Flowers";
                 default: return enumName;
             }
         }

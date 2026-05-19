@@ -52,7 +52,7 @@ namespace RainWorldWallpaperMod
 
         private float rampUpInterval = 10f; // Fast spawn interval for first half
 
-        // Creature types that should never be spawned by chaos system
+        // Creature types excluded from normal chaos mode. Spawn All intentionally bypasses this list.
         private static readonly HashSet<string> BlacklistedCreatures = new HashSet<string>
         {
             "Slugcat",              // Player creatures - cannot be spawned like regular creatures
@@ -357,14 +357,13 @@ namespace RainWorldWallpaperMod
 
                         seenTypes.Add(type);
 
-                        // Check if blacklisted (unless spawn all is enabled)
-                        if (!spawnAll && BlacklistedCreatures.Contains(type.ToString()))
+                        if (!spawnAll && IsBlacklisted(type))
                         {
                             blacklistedTypes.Add(type.ToString());
                             continue;
                         }
 
-                        regionalCreatureTypes.Add(type);
+                        TryAddCreatureType(type, regionalCreatureTypes, enforceBlacklist: !spawnAll);
                     }
                 }
             }
@@ -375,7 +374,7 @@ namespace RainWorldWallpaperMod
             if (chaosLevel >= 7)
             {
                 WallpaperMod.Log?.LogInfo($"ChaosManager: 🔥 Chaos 7+ activated - forcing special creatures into spawn pool");
-                WallpaperMod.Log?.LogInfo($"ChaosManager: ModManager.MSC (Downpour DLC) = {ModManager.MSC}");
+                WallpaperMod.Log?.LogInfo($"ChaosManager: Downpour DLC enabled = {ModCompatibility.IsDownpourEnabled}");
 
                 // Add vanilla Scavenger
                 if (!regionalCreatureTypes.Contains(CreatureTemplate.Type.Scavenger))
@@ -385,13 +384,12 @@ namespace RainWorldWallpaperMod
                 }
 
                 // Add DLC creatures if Downpour is installed
-                if (ModManager.MSC)
+                if (ModCompatibility.IsDownpourEnabled)
                 {
                     // Force add SlugNPC (Slugpup)
                     var slugNPC = new CreatureTemplate.Type("SlugNPC", true);
-                    if (!regionalCreatureTypes.Contains(slugNPC))
+                    if (TryAddCreatureType(slugNPC, regionalCreatureTypes, enforceBlacklist: false))
                     {
-                        regionalCreatureTypes.Add(slugNPC);
                         WallpaperMod.Log?.LogInfo($"ChaosManager: ✓ Force-added SlugNPC (Slugpup)");
                     }
 
@@ -404,10 +402,8 @@ namespace RainWorldWallpaperMod
                             // Create the type - constructor with true will register it if it doesn't exist
                             var creatureType = new CreatureTemplate.Type(creatureName, true);
 
-                            // Force add to pool without checking template (trusting it will work or fail gracefully at spawn time)
-                            if (!regionalCreatureTypes.Contains(creatureType))
+                            if (TryAddCreatureType(creatureType, regionalCreatureTypes, enforceBlacklist: false))
                             {
-                                regionalCreatureTypes.Add(creatureType);
                                 WallpaperMod.Log?.LogInfo($"ChaosManager: ✓ Force-added {creatureName} (DLC)");
                             }
                             else
@@ -525,7 +521,8 @@ namespace RainWorldWallpaperMod
                     var validNeighbors = new System.Collections.Generic.List<int>();
                     foreach (var n in neighbors)
                     {
-                        if (n > -1 && n < game.world.abstractRooms.Length && n != currentRoom.abstractRoom.index)
+                        if (n > -1 && n < game.world.abstractRooms.Length && n != currentRoom.abstractRoom.index &&
+                            IsValidChaosSpawnRoom(game.world.abstractRooms[n]))
                         {
                             validNeighbors.Add(n);
                         }
@@ -548,7 +545,8 @@ namespace RainWorldWallpaperMod
                 while (attempts < 10)
                 {
                     var randomRoom = game.world.abstractRooms[UnityEngine.Random.Range(0, game.world.abstractRooms.Length)];
-                    if (randomRoom != null && randomRoom.index != currentRoom.abstractRoom.index)
+                    if (randomRoom != null && randomRoom.index != currentRoom.abstractRoom.index &&
+                        IsValidChaosSpawnRoom(randomRoom))
                     {
                         spawnRoom = randomRoom;
                         break;
@@ -566,13 +564,26 @@ namespace RainWorldWallpaperMod
             try
             {
                 // Create abstract creature in the spawn room (NOT current room)
+                bool spawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
+                if (!spawnAll && IsBlacklisted(creatureType))
+                {
+                    WallpaperMod.Log?.LogWarning($"ChaosManager: Refusing blacklisted spawn type {creatureType}");
+                    return;
+                }
+
                 var entityID = new EntityID(-1, UnityEngine.Random.Range(0, 100000));
                 var creatureTemplate = StaticWorld.GetCreatureTemplate(creatureType);
+                if (creatureTemplate == null)
+                {
+                    WallpaperMod.Log?.LogWarning($"ChaosManager: No template for {creatureType}, skipping spawn");
+                    return;
+                }
+
                 var abstractCreature = new AbstractCreature(
                     game.world,
                     creatureTemplate,
                     null,
-                    new WorldCoordinate(spawnRoom.index, -1, -1, 0),
+                    spawnRoom.RandomNodeInRoom(),
                     entityID
                 );
 
@@ -669,12 +680,74 @@ namespace RainWorldWallpaperMod
         {
             spawnedCreatures.RemoveAll(creature =>
             {
-                if (creature == null || creature.realizedCreature == null || creature.realizedCreature.slatedForDeletetion)
+                if (creature == null)
+                {
+                    return true;
+                }
+
+                if (creature.realizedCreature != null && creature.realizedCreature.slatedForDeletetion)
                 {
                     return true; // Remove from list
                 }
                 return false;
             });
+        }
+
+        private static bool IsBlacklisted(CreatureTemplate.Type type)
+        {
+            return type == null || BlacklistedCreatures.Contains(type.ToString());
+        }
+
+        private static bool TryAddCreatureType(CreatureTemplate.Type type, List<CreatureTemplate.Type> list, bool enforceBlacklist)
+        {
+            if ((enforceBlacklist && IsBlacklisted(type)) || type == null || list.Contains(type) || StaticWorld.GetCreatureTemplate(type) == null)
+            {
+                return false;
+            }
+
+            list.Add(type);
+            return true;
+        }
+
+        private static bool IsValidChaosSpawnRoom(AbstractRoom room)
+        {
+            if (room == null || room.gate || room.shelter || IsShelterRoomName(room.name))
+            {
+                return false;
+            }
+
+            return !room.name.StartsWith("GATE_", StringComparison.OrdinalIgnoreCase) &&
+                !room.name.StartsWith("OffScreenDen", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsShelterRoomName(string roomName)
+        {
+            if (string.IsNullOrWhiteSpace(roomName))
+            {
+                return true;
+            }
+
+            string[] parts = roomName.Split('_');
+            if (parts.Length < 2)
+            {
+                return false;
+            }
+
+            string suffix = parts[parts.Length - 1];
+            if (!suffix.StartsWith("S", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            for (int i = 1; i < suffix.Length; i++)
+            {
+                if (!char.IsDigit(suffix[i]))
+                {
+                    return false;
+                }
+            }
+
+            return suffix.Length > 1;
         }
 
         /// <summary>

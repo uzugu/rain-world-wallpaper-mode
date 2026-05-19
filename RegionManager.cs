@@ -19,35 +19,6 @@ namespace RainWorldWallpaperMod
 
         private int currentRegionIndex = 0;
 
-        // All Rain World regions (vanilla + Downpour)
-        private static readonly string[] VANILLA_REGIONS = new string[]
-        {
-            "SU", // Outskirts
-            "HI", // Industrial Complex
-            "CC", // Chimney Canopy
-            "GW", // Garbage Wastes
-            "SH", // Shaded Citadel
-            "DS", // Drainage System
-            "SL", // Shoreline
-            "SI", // Sky Islands
-            "LF", // Farm Arrays
-            "UW", // The Exterior
-            "SS", // Five Pebbles
-            "SB"  // Subterranean
-        };
-
-        private static readonly string[] DOWNPOUR_REGIONS = new string[]
-        {
-            "LM", // Looks to the Moon
-            "RM", // Pipeyard
-            "DM", // Metropolis
-            "LC", // Outer Expanse
-            "MS", // Waterfront Facility
-            "VS", // Undergrowth
-            "CL", // Silent Construct
-            "OE"  // Rubicon
-        };
-
         public RegionManager(WallpaperController controller, string startRegion)
         {
             this.controller = controller;
@@ -60,12 +31,9 @@ namespace RainWorldWallpaperMod
 
         private void InitializeRegions()
         {
+            string campaign = WallpaperMod.Options?.SelectedCampaign.Value;
             var distinctRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var region in VANILLA_REGIONS)
-            {
-                distinctRegions.Add(region);
-            }
-            foreach (var region in DOWNPOUR_REGIONS)
+            foreach (var region in WallpaperRegionCatalog.GetRegionsForCampaign(campaign))
             {
                 distinctRegions.Add(region);
             }
@@ -181,10 +149,16 @@ namespace RainWorldWallpaperMod
         /// <summary>
         /// Called when campaign changes - clears visited regions to start fresh
         /// </summary>
-        public void OnCampaignChange()
+        public void OnCampaignChange(string startRegion = null)
         {
             visitedRegions.Clear();
             roomsExploredInRegion = 0;
+            if (!string.IsNullOrWhiteSpace(startRegion))
+            {
+                currentRegion = startRegion.ToUpperInvariant();
+            }
+
+            InitializeRegions();
             WallpaperMod.Log?.LogInfo("RegionManager: Campaign changed, cleared visited regions");
         }
 

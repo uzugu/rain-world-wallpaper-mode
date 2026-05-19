@@ -30,6 +30,7 @@ namespace RainWorldWallpaperMod
             {
                 playerCheckCounter = 0;
                 RemoveActivePlayers(game);
+                RemoveActiveOverseers(game);
             }
 
             if (IsPrepared)
@@ -83,6 +84,42 @@ namespace RainWorldWallpaperMod
                 }
 
                 game.Players.Remove(abstractPlayer);
+            }
+        }
+
+        private void RemoveActiveOverseers(RainWorldGame game)
+        {
+            if (game?.world?.abstractRooms == null)
+            {
+                return;
+            }
+
+            foreach (var room in game.world.abstractRooms)
+            {
+                if (room?.creatures == null || room.creatures.Count == 0)
+                {
+                    continue;
+                }
+
+                var overseersToRemove = new List<AbstractCreature>();
+                foreach (var creature in room.creatures)
+                {
+                    if (creature?.creatureTemplate?.type?.ToString() == "Overseer")
+                    {
+                        overseersToRemove.Add(creature);
+                    }
+                }
+
+                foreach (var overseer in overseersToRemove)
+                {
+                    if (overseer.realizedCreature != null)
+                    {
+                        overseer.realizedCreature.RemoveFromRoom();
+                        overseer.realizedCreature.Destroy();
+                    }
+
+                    room.creatures.Remove(overseer);
+                }
             }
         }
     }

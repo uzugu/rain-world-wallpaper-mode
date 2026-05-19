@@ -27,6 +27,7 @@ namespace RainWorldWallpaperMod
         private readonly FLabel campaignLabel;
         private readonly FLabel regionLabel;
         private readonly FLabel cameraModeLabel;
+        private readonly FLabel rotStateLabel;
         private readonly FLabel roomLabel;
         private readonly FLabel lockLabel;
         private readonly FLabel travelInstructions;
@@ -34,13 +35,15 @@ namespace RainWorldWallpaperMod
         private List<string> availableCampaigns;
         private List<string> availableRegions;
         private List<string> availableCameraModes;
+        private List<string> availableRotStates;
         private List<string> availableRooms;
         private int selectedCampaignIndex;
         private int selectedRegionIndex;
         private int selectedCameraModeIndex;
+        private int selectedRotStateIndex;
         private int selectedRoomIndex;
 
-        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = room, 4 = lock, 5 = chaos mode, 6 = chaos level, 7 = chaos spawn all, 8 = no rain transition
+        // Focus tracking: 0 = campaign, 1 = region, 2 = camera mode, 3 = Watcher state, 4 = room, 5 = lock, 6 = chaos mode, 7 = chaos level, 8 = chaos spawn all, 9 = no rain transition
         private int currentFocus = 0;
 
         private bool isVisible;
@@ -90,10 +93,11 @@ namespace RainWorldWallpaperMod
             campaignLabel = CreateLabel(100f, 180f, string.Empty);
             regionLabel = CreateLabel(100f, 150f, string.Empty);
             cameraModeLabel = CreateLabel(100f, 120f, string.Empty);
-            roomLabel = CreateLabel(100f, 90f, string.Empty);
-            lockLabel = CreateLabel(100f, 60f, string.Empty);
+            rotStateLabel = CreateLabel(100f, 90f, string.Empty);
+            roomLabel = CreateLabel(100f, 60f, string.Empty);
+            lockLabel = CreateLabel(100f, 30f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 30f, "Right/D -> Next | Left/A -> Prev | Up/Down -> Cam | L -> Lock");
+            travelInstructions = CreateLabel(100f, 5f, "Right/D -> Next | Left/A -> Prev | Enter/G -> Apply | L -> Lock");
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
@@ -111,6 +115,7 @@ namespace RainWorldWallpaperMod
             container.AddChild(campaignLabel);
             container.AddChild(regionLabel);
             container.AddChild(cameraModeLabel);
+            container.AddChild(rotStateLabel);
             container.AddChild(roomLabel);
             container.AddChild(lockLabel);
             container.AddChild(travelInstructions);
@@ -185,10 +190,10 @@ namespace RainWorldWallpaperMod
             bool chaosSpawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
             bool noRainTransition = WallpaperMod.Options?.NoRainTransition.Value ?? false;
 
-            bool isFocusedMode = currentFocus == 5;
-            bool isFocusedLevel = currentFocus == 6;
-            bool isFocusedSpawnAll = currentFocus == 7;
-            bool isFocusedNoRain = currentFocus == 8;
+            bool isFocusedMode = currentFocus == 6;
+            bool isFocusedLevel = currentFocus == 7;
+            bool isFocusedSpawnAll = currentFocus == 8;
+            bool isFocusedNoRain = currentFocus == 9;
 
             string modePrefix = isFocusedMode ? ">> " : "   ";
             string levelPrefix = isFocusedLevel ? ">> " : "   ";
@@ -237,11 +242,23 @@ namespace RainWorldWallpaperMod
                 cameraModeLabel.color = isFocused ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
             }
 
+            if (availableRotStates != null && availableRotStates.Count > 0)
+            {
+                bool watcherCampaign = IsSelectedCampaignWatcher();
+                string rotStateName = watcherCampaign ? GetRotStateDisplayName(availableRotStates[selectedRotStateIndex]) : "Watcher campaign only";
+                bool isFocused = currentFocus == 3;
+                string prefix = isFocused ? ">> " : "   ";
+                rotStateLabel.text = $"{prefix}Watcher:   < {rotStateName} >";
+                rotStateLabel.color = watcherCampaign
+                    ? (isFocused ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f))
+                    : new Color(0.5f, 0.5f, 0.5f, 0.8f);
+            }
+
             if (availableRooms != null && availableRooms.Count > 0)
             {
                 bool regionMatches = IsSelectedRegionCurrent();
                 string roomName = availableRooms[selectedRoomIndex];
-                bool isFocused = currentFocus == 3;
+                bool isFocused = currentFocus == 4;
                 string prefix = isFocused ? ">> " : "   ";
 
                 if (!regionMatches)
@@ -259,7 +276,7 @@ namespace RainWorldWallpaperMod
 
             // Lock toggle
             bool isLocked = controller?.IsRoomLocked ?? false;
-            bool isFocusedLock = currentFocus == 4;
+            bool isFocusedLock = currentFocus == 5;
             string lockPrefix = isFocusedLock ? ">> " : "   ";
             lockLabel.text = $"{lockPrefix}Lock Room: [{(isLocked ? "ON" : "OFF")}]";
             lockLabel.color = isFocusedLock ? new Color(1f, 0.85f, 0f, 1f) : new Color(0f, 0.85f, 1f, 1f);
@@ -298,20 +315,7 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            // Get all regions from enum
-            availableRegions = Enum.GetNames(typeof(WallpaperModOptions.RegionChoice)).ToList();
-            selectedRegionIndex = 0;
-
-            // Try to match current region
-            if (controller?.RegionMgr != null)
-            {
-                string currentRegion = controller.RegionMgr.GetCurrentRegion();
-                int index = availableRegions.FindIndex(r => string.Equals(r, currentRegion, StringComparison.OrdinalIgnoreCase));
-                if (index >= 0)
-                {
-                    selectedRegionIndex = index;
-                }
-            }
+            RefreshRegionList(preferredRegion: controller?.RegionMgr?.GetCurrentRegion());
 
             // Get all camera modes from enum
             availableCameraModes = Enum.GetNames(typeof(WallpaperModOptions.CameraMode)).ToList();
@@ -325,6 +329,19 @@ namespace RainWorldWallpaperMod
                 if (index >= 0)
                 {
                     selectedCameraModeIndex = index;
+                }
+            }
+
+            availableRotStates = Enum.GetNames(typeof(WallpaperModOptions.RotState)).ToList();
+            selectedRotStateIndex = 0;
+
+            if (WallpaperMod.Options != null)
+            {
+                string currentRotState = WallpaperMod.Options.RotStateConfig.Value;
+                int index = availableRotStates.FindIndex(s => s == currentRotState);
+                if (index >= 0)
+                {
+                    selectedRotStateIndex = index;
                 }
             }
 
@@ -360,9 +377,29 @@ namespace RainWorldWallpaperMod
             }
         }
 
+        private void RefreshRegionList(string preferredRegion = null)
+        {
+            string selectedCampaign = availableCampaigns != null && availableCampaigns.Count > 0
+                ? availableCampaigns[selectedCampaignIndex]
+                : WallpaperMod.Options?.SelectedCampaign.Value;
+
+            availableRegions = WallpaperRegionCatalog.GetRegionsForCampaign(selectedCampaign).ToList();
+            selectedRegionIndex = 0;
+
+            string regionToSelect = !string.IsNullOrWhiteSpace(preferredRegion)
+                ? preferredRegion
+                : WallpaperRegionCatalog.GetDefaultStartRegionForCampaign(selectedCampaign);
+
+            int index = availableRegions.FindIndex(r => string.Equals(r, regionToSelect, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                selectedRegionIndex = index;
+            }
+        }
+
         public void CycleFocus(int direction)
         {
-            currentFocus = (currentFocus + direction + 9) % 9;
+            currentFocus = (currentFocus + direction + 10) % 10;
             RefreshQuickTravelLabels();
             RefreshChaosLabels();
         }
@@ -383,6 +420,13 @@ namespace RainWorldWallpaperMod
             }
             else if (currentFocus == 3)
             {
+                if (IsSelectedCampaignWatcher())
+                {
+                    CycleRotState(direction);
+                }
+            }
+            else if (currentFocus == 4)
+            {
                 // Only allow room cycling if selected region matches current region
                 if (IsSelectedRegionCurrent())
                 {
@@ -390,13 +434,13 @@ namespace RainWorldWallpaperMod
                 }
                 // Otherwise do nothing - room selection disabled
             }
-            else if (currentFocus == 4)
+            else if (currentFocus == 5)
             {
                 // Lock is toggled, not cycled
                 controller?.ToggleRoomLock();
                 RefreshQuickTravelLabels();
             }
-            else if (currentFocus == 5)
+            else if (currentFocus == 6)
             {
                 // Chaos mode toggle
                 if (WallpaperMod.Options != null)
@@ -405,7 +449,7 @@ namespace RainWorldWallpaperMod
                     RefreshChaosLabels();
                 }
             }
-            else if (currentFocus == 6)
+            else if (currentFocus == 7)
             {
                 // Chaos level cycling (1-10)
                 if (WallpaperMod.Options != null)
@@ -421,7 +465,7 @@ namespace RainWorldWallpaperMod
                     RefreshChaosLabels();
                 }
             }
-            else if (currentFocus == 7)
+            else if (currentFocus == 8)
             {
                 // Chaos spawn all toggle
                 if (WallpaperMod.Options != null)
@@ -430,7 +474,7 @@ namespace RainWorldWallpaperMod
                     RefreshChaosLabels();
                 }
             }
-            else if (currentFocus == 8)
+            else if (currentFocus == 9)
             {
                 // No rain transition toggle
                 if (WallpaperMod.Options != null)
@@ -457,6 +501,8 @@ namespace RainWorldWallpaperMod
             if (availableCampaigns == null || availableCampaigns.Count == 0) return;
 
             selectedCampaignIndex = (selectedCampaignIndex + direction + availableCampaigns.Count) % availableCampaigns.Count;
+            RefreshRegionList();
+            selectedRoomIndex = 0;
             RefreshQuickTravelLabels();
         }
 
@@ -480,6 +526,18 @@ namespace RainWorldWallpaperMod
             RefreshQuickTravelLabels();
         }
 
+        private void CycleRotState(int direction)
+        {
+            if (availableRotStates == null || availableRotStates.Count == 0) return;
+
+            selectedRotStateIndex = (selectedRotStateIndex + direction + availableRotStates.Count) % availableRotStates.Count;
+            if (WallpaperMod.Options != null)
+            {
+                WallpaperMod.Options.RotStateConfig.Value = availableRotStates[selectedRotStateIndex];
+            }
+            RefreshQuickTravelLabels();
+        }
+
         private void CycleRoom(int direction)
         {
             if (availableRooms == null || availableRooms.Count == 0) return;
@@ -490,16 +548,19 @@ namespace RainWorldWallpaperMod
 
         public void ApplyTravel()
         {
-            if (availableCampaigns == null || availableRegions == null || availableCameraModes == null || availableRooms == null) return;
+            if (availableCampaigns == null || availableRegions == null || availableCameraModes == null || availableRotStates == null || availableRooms == null) return;
 
             string selectedCampaign = availableCampaigns[selectedCampaignIndex];
             string selectedRegion = availableRegions[selectedRegionIndex];
             string selectedCameraMode = availableCameraModes[selectedCameraModeIndex];
+            string selectedRotState = IsSelectedCampaignWatcher() ? availableRotStates[selectedRotStateIndex] : WallpaperModOptions.RotState.Natural.ToString();
             string selectedRoom = availableRooms[selectedRoomIndex];
 
             bool regionChanging = !IsSelectedRegionCurrent();
+            string currentCampaign = WallpaperMod.Options?.SelectedCampaign.Value;
+            bool campaignChanging = !string.Equals(currentCampaign, selectedCampaign, StringComparison.OrdinalIgnoreCase);
 
-            WallpaperMod.Log?.LogInfo($"Quick Travel: Campaign={selectedCampaign}, Region={selectedRegion}, CameraMode={selectedCameraMode}, Room={selectedRoom}");
+            WallpaperMod.Log?.LogInfo($"Quick Travel: Campaign={selectedCampaign}, Region={selectedRegion}, CameraMode={selectedCameraMode}, RotState={selectedRotState}, Room={selectedRoom}");
 
             // Update the config
             if (WallpaperMod.Options != null)
@@ -507,10 +568,16 @@ namespace RainWorldWallpaperMod
                 WallpaperMod.Options.SelectedCampaign.Value = selectedCampaign;
                 WallpaperMod.Options.StartRegion.Value = selectedRegion;
                 WallpaperMod.Options.CameraModeConfig.Value = selectedCameraMode;
+                WallpaperMod.Options.RotStateConfig.Value = selectedRotState;
             }
 
             // Update camera mode in controller
             controller?.SetCameraMode(WallpaperModOptions.GetCameraMode(selectedCameraMode));
+            if (campaignChanging)
+            {
+                controller?.RegionMgr?.OnCampaignChange(selectedRegion);
+                regionChanging = true;
+            }
 
             // If changing regions, do that first (room change will happen after region loads)
             if (regionChanging)
@@ -546,36 +613,25 @@ namespace RainWorldWallpaperMod
                 case "Rivulet": return "Rivulet";
                 case "Spearmaster": return "Spearmaster";
                 case "Saint": return "Saint";
+                case "Watcher": return "Watcher";
                 default: return enumName;
             }
         }
 
         private string GetRegionDisplayName(string enumName)
         {
-            switch (enumName)
-            {
-                case "SU": return "Outskirts";
-                case "HI": return "Industrial Complex";
-                case "CC": return "Chimney Canopy";
-                case "GW": return "Garbage Wastes";
-                case "SH": return "Shaded Citadel";
-                case "DS": return "Drainage System";
-                case "SL": return "Shoreline";
-                case "SI": return "Sky Islands";
-                case "LF": return "Farm Arrays";
-                case "UW": return "The Exterior";
-                case "SS": return "Five Pebbles";
-                case "SB": return "Subterranean";
-                case "LM": return "Looks to the Moon";
-                case "RM": return "Waterfront Facility";
-                case "DM": return "Metropolis";
-                case "LC": return "Outer Expanse";
-                case "MS": return "Submerged Superstructure";
-                case "VS": return "Pipeyard";
-                case "CL": return "The Rot";
-                case "OE": return "Rubicon";
-                default: return enumName;
-            }
+            string selectedCampaign = availableCampaigns != null && availableCampaigns.Count > 0
+                ? availableCampaigns[selectedCampaignIndex]
+                : WallpaperMod.Options?.SelectedCampaign.Value;
+
+            return WallpaperRegionCatalog.GetDisplayName(enumName, selectedCampaign);
+        }
+
+        private bool IsSelectedCampaignWatcher()
+        {
+            return availableCampaigns != null &&
+                availableCampaigns.Count > 0 &&
+                string.Equals(availableCampaigns[selectedCampaignIndex], "Watcher", StringComparison.OrdinalIgnoreCase);
         }
 
         private string GetCameraModeDisplayName(string enumName)
@@ -586,6 +642,18 @@ namespace RainWorldWallpaperMod
                 case "Random": return "Single Random";
                 case "Sequential": return "All Angles";
                 case "FirstOnly": return "First Only";
+                default: return enumName;
+            }
+        }
+
+        private string GetRotStateDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "Natural": return "Natural Mix";
+                case "Normal": return "Clean";
+                case "Rotted": return "Rotted";
+                case "Karma": return "Karma Flowers";
                 default: return enumName;
             }
         }

@@ -27,12 +27,16 @@ namespace RainWorldWallpaperMod
         private readonly System.Random random = new System.Random();
         private bool axisSkipActive;
         private readonly WallpaperInputState inputState = new WallpaperInputState();
+
+        // Rot state tracking for Watcher campaign
+        private WallpaperModOptions.RotState currentRotState = WallpaperModOptions.RotState.Natural;
         private readonly WallpaperRainCycleController rainCycleController;
         private readonly WallpaperRoomTracker roomTracker;
         private readonly WallpaperUiController uiController = new WallpaperUiController();
         private readonly WallpaperSpectatorState spectatorState = new WallpaperSpectatorState();
         private readonly WallpaperSessionState sessionState = new WallpaperSessionState();
         private readonly WallpaperTransitionController transitionController;
+        private readonly WatcherWorldStateController watcherWorldState = new WatcherWorldStateController();
 
         public WallpaperController(RainWorldGame game, string startRegion)
         {
@@ -53,6 +57,10 @@ namespace RainWorldWallpaperMod
                 stayDuration = WallpaperMod.Options.StayDuration.Value;
                 transitionController.SetTransitionDuration(transitionDuration);
                 roomTracker.SetCameraMode(WallpaperModOptions.GetCameraMode(WallpaperMod.Options.CameraModeConfig.Value));
+
+                // Load rot state from config
+                currentRotState = WallpaperModOptions.GetRotState(WallpaperMod.Options.RotStateConfig.Value);
+                WallpaperMod.Log?.LogInfo($"WallpaperController: Rot state set to {currentRotState}");
 
                 // Initialize chaos if enabled
                 if (WallpaperMod.Options.EnableChaos.Value)
@@ -83,10 +91,22 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
+            bool watcherCampaign = IsWatcherCampaign();
+            if (watcherCampaign)
+            {
+                SyncWatcherWorldState();
+                watcherWorldState.Update(Game, currentRotState, dt);
+            }
             uiController.EnsureInitialized(GetPrimaryCamera(), this);
             sessionState.TryStartExploration(Game.world, stayDuration);
             HandleInput();
             AdvanceSession(dt);
+
+            if (watcherCampaign && roomTracker.HasNewRoomSinceLastCheck())
+            {
+                watcherWorldState.ApplyToCurrentRoom(Game, currentRotState);
+            }
+
             EchoMusic?.Update();
             SyncChaosRuntimeState();
             ChaosManager?.Update(dt);
@@ -120,6 +140,7 @@ namespace RainWorldWallpaperMod
 
         public void Shutdown()
         {
+            watcherWorldState.ClearSessionState(Game);
             uiController.Shutdown();
             RegionManager?.Cleanup();
             EchoMusic?.Shutdown();
@@ -457,9 +478,47 @@ namespace RainWorldWallpaperMod
             transitionController.UpdateTransition(dt, sessionState);
         }
 
+        private void SyncWatcherWorldState()
+        {
+            if (WallpaperMod.Options == null)
+            {
+                return;
+            }
+
+            var configuredState = WallpaperModOptions.GetRotState(WallpaperMod.Options.RotStateConfig.Value);
+            if (configuredState == currentRotState)
+            {
+                return;
+            }
+
+            currentRotState = configuredState;
+            watcherWorldState.ApplyToCurrentRoom(Game, currentRotState);
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Watcher world state changed to {currentRotState}");
+        }
+
+        internal void BeforeRoomLoaded(Room room)
+        {
+            if (IsWatcherCampaign())
+            {
+                watcherWorldState.ApplyBeforeRoomLoaded(Game, room, currentRotState);
+            }
+        }
+
+        internal void AfterRoomLoaded(Room room)
+        {
+            if (IsWatcherCampaign())
+            {
+                watcherWorldState.ApplyAfterRoomLoaded(Game, room, currentRotState);
+            }
+        }
+
         private void CompleteTransition(RoomCamera camera)
         {
-            transitionController.CompleteTransition(camera, sessionState);
+            bool isNewRoom = transitionController.CompleteTransition(camera, sessionState);
+            if (isNewRoom)
+            {
+                roomTracker.MarkNewRoom();
+            }
         }
 
         internal void OnRegionChanged(string regionCode)
@@ -497,6 +556,7 @@ namespace RainWorldWallpaperMod
 
         internal void PrepareForWorldReload()
         {
+            watcherWorldState.ClearSessionState(Game);
             sessionState.PrepareForReload();
             roomTracker.Reset();
             uiController.ResetForReload();
@@ -572,11 +632,8 @@ namespace RainWorldWallpaperMod
 
             WallpaperMod.Log?.LogInfo($"WallpaperController: Region change requested to {regionCode}");
 
-            // Update region manager to point to this region
+            // Update region manager to point to this region. ForceRegion calls OnRegionChanged.
             RegionManager?.ForceRegion(regionCode);
-
-            // Trigger the change
-            OnRegionChanged(regionCode);
         }
 
         /// <summary>
@@ -700,6 +757,11 @@ namespace RainWorldWallpaperMod
         private RoomCamera GetPrimaryCamera()
         {
             return Game?.cameras != null && Game.cameras.Length > 0 ? Game.cameras[0] : null;
+        }
+
+        private bool IsWatcherCampaign()
+        {
+            return string.Equals(WallpaperMod.Options?.SelectedCampaign.Value, "Watcher", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -260,31 +260,7 @@ namespace RainWorldWallpaperMod
 
         private string GetRegionName(string regionCode)
         {
-            // Map region codes to full names
-            switch (regionCode)
-            {
-                case "SU": return "Outskirts";
-                case "HI": return "Industrial Complex";
-                case "CC": return "Chimney Canopy";
-                case "GW": return "Garbage Wastes";
-                case "SH": return "Shaded Citadel";
-                case "DS": return "Drainage System";
-                case "SL": return "Shoreline";
-                case "SI": return "Sky Islands";
-                case "LF": return "Farm Arrays";
-                case "UW": return "The Exterior";
-                case "SS": return "Five Pebbles";
-                case "SB": return "Subterranean";
-                case "LM": return "Looks to the Moon";
-                case "RM": return "Pipeyard";
-                case "DM": return "Metropolis";
-                case "LC": return "Outer Expanse";
-                case "MS": return "Waterfront Facility";
-                case "VS": return "Undergrowth";
-                case "CL": return "Silent Construct";
-                case "OE": return "Rubicon";
-                default: return regionCode;
-            }
+            return WallpaperRegionCatalog.GetDisplayName(regionCode, WallpaperMod.Options?.SelectedCampaign.Value);
         }
 
         private string FormatTime(float seconds)

@@ -160,7 +160,7 @@ namespace RainWorldWallpaperMod
             startPosition = cameraPosition;
         }
 
-        public void CompleteTransition(RoomCamera camera, WallpaperSessionState sessionState)
+        public bool CompleteTransition(RoomCamera camera, WallpaperSessionState sessionState)
         {
             sessionState.CompleteTransition();
 
@@ -183,6 +183,7 @@ namespace RainWorldWallpaperMod
             }
 
             echoMusic?.OnRoomChanged(roomTracker.CurrentTargetRoom);
+            return isNewRoom;
         }
 
         private float EaseInOutCubic(float t)

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.0.0")]
+    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.1.4")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
@@ -21,30 +21,6 @@ namespace RainWorldWallpaperMod
         private string requestedStartRegion = "SU";
         private string commandLineStartRegion;
         private string commandLineCampaign;
-
-        private static readonly Dictionary<string, string> RegionStartRooms = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "SU", "SU_A01" },
-            { "HI", "HI_A01" },
-            { "CC", "CC_A01" },
-            { "GW", "GW_A01" },
-            { "SH", "SH_A01" },
-            { "DS", "DS_A01" },
-            { "SL", "SL_A01" },
-            { "SI", "SI_A01" },
-            { "LF", "LF_A01" },
-            { "UW", "UW_A01" },
-            { "SS", "SS_A01" },
-            { "SB", "SB_A01" },
-            { "LM", "LM_A01" },
-            { "RM", "RM_A01" },
-            { "DM", "DM_A01" },
-            { "LC", "LC_A01" },
-            { "MS", "MS_A01" },
-            { "VS", "VS_A01" },
-            { "CL", "CL_A01" },
-            { "OE", "OE_A01" }
-        };
 
         public static ManualLogSource Log { get; private set; }
 
@@ -65,7 +41,9 @@ namespace RainWorldWallpaperMod
             On.RainWorldGame.Update += RainWorldGame_Update;
             On.RainWorldGame.ShutDownProcess += RainWorldGame_ShutDownProcess;
             On.RoomCamera.Update += RoomCamera_Update;
+            On.Room.Loaded += Room_Loaded;
             On.Player.Update += Player_Update;
+            On.Overseer.Update += Overseer_Update;
 
             MenuIntegration.Initialize();
         }
@@ -187,6 +165,21 @@ namespace RainWorldWallpaperMod
             }
         }
 
+        private void Room_Loaded(On.Room.orig_Loaded orig, Room self)
+        {
+            if (activeController != null && activeController.Game == self?.game)
+            {
+                activeController.BeforeRoomLoaded(self);
+            }
+
+            orig(self);
+
+            if (activeController != null && activeController.Game == self?.game)
+            {
+                activeController.AfterRoomLoaded(self);
+            }
+        }
+
         private void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
         {
             if (activeController != null)
@@ -199,6 +192,26 @@ namespace RainWorldWallpaperMod
                 }
 
                 // Block player-controlled slugcat updates entirely during wallpaper mode
+                return;
+            }
+
+            orig(self, eu);
+        }
+
+        private void Overseer_Update(On.Overseer.orig_Update orig, Overseer self, bool eu)
+        {
+            if (activeController != null)
+            {
+                try
+                {
+                    self.RemoveFromRoom();
+                    self.Destroy();
+                }
+                catch (Exception ex)
+                {
+                    Log?.LogWarning($"Failed to remove overseer during wallpaper mode: {ex.Message}");
+                }
+
                 return;
             }
 
@@ -236,7 +249,8 @@ namespace RainWorldWallpaperMod
             {
                 "White", "Yellow", "Red",           // Vanilla
                 "Gourmand", "Artificer", "Rivulet", // Downpour
-                "Spearmaster", "Saint"              // Downpour
+                "Spearmaster", "Saint",              // Downpour
+                "Watcher"                            // The Watcher
             };
 
             string currentCampaign = Options.SelectedCampaign.Value;
@@ -256,17 +270,14 @@ namespace RainWorldWallpaperMod
             // Update config
             Options.SelectedCampaign.Value = nextCampaign;
 
-            // Notify RegionManager that campaign changed (clears visited regions)
-            activeController?.RegionManager?.OnCampaignChange();
-
-            // Get a starting region for the new campaign (use first vanilla region)
-            string startRegion = "SU"; // Default to Outskirts
+            string startRegion = WallpaperRegionCatalog.GetDefaultStartRegionForCampaign(nextCampaign);
 
             Log?.LogInfo($"Starting new campaign '{nextCampaign}' in region '{startRegion}'");
 
             // Trigger world reload with new campaign and region
             if (activeController?.Game?.manager != null)
             {
+                activeController?.RegionManager?.OnCampaignChange(startRegion);
                 QueueRegionReload(activeController.Game.manager, startRegion);
             }
         }
@@ -279,7 +290,9 @@ namespace RainWorldWallpaperMod
             On.RainWorldGame.Update -= RainWorldGame_Update;
             On.RainWorldGame.ShutDownProcess -= RainWorldGame_ShutDownProcess;
             On.RoomCamera.Update -= RoomCamera_Update;
+            On.Room.Loaded -= Room_Loaded;
             On.Player.Update -= Player_Update;
+            On.Overseer.Update -= Overseer_Update;
 
             MenuIntegration.Cleanup();
             Log?.LogInfo("Rain World Wallpaper Mod unloaded");
@@ -343,15 +356,9 @@ namespace RainWorldWallpaperMod
                 return "SU_A01";
             }
 
-            if (RegionStartRooms.TryGetValue(regionCode, out var room))
-            {
-                Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' -> Room '{room}'");
-                return room;
-            }
-
-            string defaultRoom = regionCode + "_A01";
-            Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' not in dictionary, using default '{defaultRoom}'");
-            return defaultRoom;
+            string room = WallpaperRegionCatalog.GetStartRoom(regionCode);
+            Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' -> Room '{room}'");
+            return room;
         }
 
         private static void TrySetField(object target, string fieldName, object value)
@@ -383,21 +390,39 @@ namespace RainWorldWallpaperMod
 
         private string ResolveInitialRegion()
         {
+            string campaign = ResolveCampaignString();
             if (!string.IsNullOrEmpty(commandLineStartRegion))
             {
-                Log?.LogInfo($"ResolveInitialRegion: Using command-line region override '{commandLineStartRegion}'");
-                return commandLineStartRegion;
+                string normalizedRegion = WallpaperRegionCatalog.NormalizeRegionForCampaign(commandLineStartRegion, campaign);
+                Log?.LogInfo($"ResolveInitialRegion: Command-line region override '{commandLineStartRegion}' resolved to '{normalizedRegion}' for campaign '{campaign}'");
+                return normalizedRegion;
             }
 
             // Try to use the config value first
             if (Options != null)
             {
                 string regionCode = WallpaperModOptions.GetRegionCode(Options.StartRegion.Value);
-                Log?.LogInfo($"ResolveInitialRegion: Config value = '{Options.StartRegion.Value}', Resolved to '{regionCode}'");
-                return regionCode;
+                string normalizedRegion = WallpaperRegionCatalog.NormalizeRegionForCampaign(regionCode, campaign);
+                if (!string.Equals(regionCode, normalizedRegion, StringComparison.OrdinalIgnoreCase))
+                {
+                    Options.StartRegion.Value = normalizedRegion;
+                }
+
+                Log?.LogInfo($"ResolveInitialRegion: Config value = '{Options.StartRegion.Value}', resolved to '{normalizedRegion}' for campaign '{campaign}'");
+                return normalizedRegion;
             }
             Log?.LogInfo($"ResolveInitialRegion: No options, defaulting to '{requestedStartRegion ?? "SU"}'");
-            return requestedStartRegion ?? "SU";
+            return WallpaperRegionCatalog.NormalizeRegionForCampaign(requestedStartRegion ?? "SU", campaign);
+        }
+
+        private string ResolveCampaignString()
+        {
+            if (!string.IsNullOrEmpty(commandLineCampaign))
+            {
+                return commandLineCampaign;
+            }
+
+            return Options?.SelectedCampaign.Value ?? WallpaperModOptions.CampaignChoice.White.ToString();
         }
 
         private SlugcatStats.Name ResolveSlugcatName()
@@ -500,7 +525,7 @@ namespace RainWorldWallpaperMod
             }
 
             normalized = normalized.ToUpperInvariant();
-            if (RegionStartRooms.ContainsKey(normalized))
+            if (WallpaperRegionCatalog.IsKnownRegion(normalized))
             {
                 return normalized;
             }
