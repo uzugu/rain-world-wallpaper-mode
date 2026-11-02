@@ -48,8 +48,8 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
 ### UI
 
 - `MenuIntegration.cs`
-  - injects the main-menu wallpaper button
-  - handles click signal routing back into `WallpaperMod`
+  - adds the `WALLPAPER MODE` button above `EXIT` through `MainMenu.AddMainMenuButton`, which handles layout, controller navigation and the click callback
+  - starts the command-line auto-launch from the main menu's first update
 
 - `WallpaperHUD.cs`
   - Futile-based HUD added directly to `Futile.stage`
@@ -105,7 +105,7 @@ The current runtime is built around these hooks:
 - `RoomCamera.Update`
 - `Player.Update`
 - `MainMenu.ctor`
-- `MainMenu.Singal`
+- `MainMenu.Update`
 
 ## Key Design Decisions
 

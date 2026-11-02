@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 using Menu;
 
@@ -12,7 +10,6 @@ namespace RainWorldWallpaperMod
     /// </summary>
     public static class MenuIntegration
     {
-        private static Menu.SimpleButton wallpaperButton;
         private static MainMenu pendingAutoLaunchMenu;
         private static bool initialized;
 
@@ -23,10 +20,9 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            // Hook into MainMenu constructor and signal handler
+            // Hook into MainMenu constructor and update
             On.Menu.MainMenu.ctor += MainMenu_ctor;
             On.Menu.MainMenu.Update += MainMenu_Update;
-            On.Menu.MainMenu.Singal += MainMenu_Singal;
 
             initialized = true;
             WallpaperMod.Log?.LogInfo("MenuIntegration: Initialized");
@@ -75,54 +71,31 @@ namespace RainWorldWallpaperMod
 
         private static void AddWallpaperModeButton(MainMenu menu)
         {
-            WallpaperMod.Log?.LogInfo("MenuIntegration: Adding Wallpaper Mode button");
-
-            // Get the last button (EXIT) position to align below it
-            Vector2 buttonPos = new Vector2(683f, 50f); // Default: centered horizontally, below menu
-            Vector2 buttonSize = new Vector2(200f, 30f); // Match standard button size
-
-            try
+            // Vanilla sizes its main menu buttons with a private helper, so copy the size of the EXIT button.
+            Vector2 buttonSize = new Vector2(110f, 30f);
+            foreach (var subObject in menu.pages[0].subObjects)
             {
-                FieldInfo field = typeof(MainMenu).GetField("mainMenuButtons", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (field?.GetValue(menu) is List<Menu.SimpleButton> buttonList && buttonList.Count > 0)
+                if (subObject is Menu.SimpleButton button && button.signalText == "EXIT")
                 {
-                    // Get the last button (EXIT)
-                    Menu.SimpleButton lastButton = buttonList[buttonList.Count - 1];
-                    // Position below EXIT button with extra spacing
-                    buttonPos = new Vector2(lastButton.pos.x, lastButton.pos.y - lastButton.size.y - 40f);
-                    buttonSize = lastButton.size; // Match the size
+                    buttonSize = button.size;
+                    break;
                 }
             }
-            catch (Exception ex)
-            {
-                WallpaperMod.Log?.LogWarning($"MenuIntegration: Unable to access mainMenuButtons - {ex.Message}");
-            }
 
-            wallpaperButton = new Menu.SimpleButton(
+            var wallpaperButton = new Menu.SimpleButton(
                 menu,
                 menu.pages[0],
                 menu.Translate("WALLPAPER MODE"),
                 "WALLPAPER_MODE",
-                buttonPos,
+                Vector2.zero,
                 buttonSize
             );
 
-            // Add directly to page, not using AddMainMenuButton
-            menu.pages[0].subObjects.Add(wallpaperButton);
+            // AddMainMenuButton lays out the button column, wires controller navigation and calls the callback
+            // when the button is pressed. Index 1 from the bottom places it directly above EXIT.
+            menu.AddMainMenuButton(wallpaperButton, () => OnWallpaperButtonClicked(menu), 1);
 
-            WallpaperMod.Log?.LogInfo($"MenuIntegration: Wallpaper button added at position {buttonPos}");
-        }
-
-        private static void MainMenu_Singal(On.Menu.MainMenu.orig_Singal orig, MainMenu self, Menu.MenuObject sender, string message)
-        {
-            if (message == "WALLPAPER_MODE")
-            {
-                OnWallpaperButtonClicked(self);
-            }
-            else
-            {
-                orig(self, sender, message);
-            }
+            WallpaperMod.Log?.LogInfo("MenuIntegration: Wallpaper button added above EXIT");
         }
 
         private static void OnWallpaperButtonClicked(MainMenu menu)
@@ -152,7 +125,6 @@ namespace RainWorldWallpaperMod
 
             On.Menu.MainMenu.ctor -= MainMenu_ctor;
             On.Menu.MainMenu.Update -= MainMenu_Update;
-            On.Menu.MainMenu.Singal -= MainMenu_Singal;
             pendingAutoLaunchMenu = null;
             initialized = false;
         }
