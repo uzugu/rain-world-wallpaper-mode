@@ -59,6 +59,13 @@ namespace RainWorldWallpaperMod
                         AddFlowerWind(room);
                         AddKarmaFlowerPatches(room);
                         break;
+                    case WallpaperModOptions.RotState.RottedKarma:
+                        ClearNaturalSeed(room);
+                        AddSentientRotInfection(room, RottedIntensity);
+                        AddRegionRotState(room, RottedIntensity);
+                        AddFlowerWind(room);
+                        AddKarmaFlowerPatches(room);
+                        break;
                 }
             });
         }
@@ -82,6 +89,11 @@ namespace RainWorldWallpaperMod
                 }
                 else if (state == WallpaperModOptions.RotState.Karma)
                 {
+                    EnsureKarmaFlowerRenderer(room);
+                }
+                else if (state == WallpaperModOptions.RotState.RottedKarma)
+                {
+                    InitializeRotPresence(room, RottedIntensity);
                     EnsureKarmaFlowerRenderer(room);
                 }
             });
@@ -137,7 +149,9 @@ namespace RainWorldWallpaperMod
 
             TryWatcherAction(() =>
             {
-                if (state == WallpaperModOptions.RotState.Rotted || state == WallpaperModOptions.RotState.Natural)
+                if (state == WallpaperModOptions.RotState.Rotted ||
+                    state == WallpaperModOptions.RotState.RottedKarma ||
+                    state == WallpaperModOptions.RotState.Natural)
                 {
                     InvokeInstance(room, "UpdateSentientRotEffect");
                 }

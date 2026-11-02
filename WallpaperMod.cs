@@ -3,12 +3,13 @@ using BepInEx.Logging;
 using Menu.Remix.MixedUI;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.1.4")]
+    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.1.6")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
@@ -19,6 +20,7 @@ namespace RainWorldWallpaperMod
         private bool autoLaunchWallpaperConsumed;
         private WallpaperController activeController;
         private string requestedStartRegion = "SU";
+        private string requestedStartRoom = "SU_A01";
         private string commandLineStartRegion;
         private string commandLineCampaign;
 
@@ -111,8 +113,12 @@ namespace RainWorldWallpaperMod
                     Options = new WallpaperModOptions();
                 }
 
-                // Register with Remix using underscore format for mod ID
-                MachineConnector.SetRegisteredOI("uzugu_wallpapermod", Options);
+                // Remix and some framework mods may discover LoadOI before OnModsInit.
+                // Avoid replacing an already-registered identical interface instance.
+                if (MachineConnector.GetRegisteredOI("uzugu_wallpapermod") != Options)
+                {
+                    MachineConnector.SetRegisteredOI("uzugu_wallpapermod", Options);
+                }
                 Log?.LogInfo("Wallpaper Mod: Remix options registered with ID 'uzugu_wallpapermod'");
             }
             catch (Exception ex)
@@ -120,7 +126,7 @@ namespace RainWorldWallpaperMod
                 Log?.LogError($"Failed to initialize and register Remix options: {ex}");
             }
 
-            Log?.LogInfo("Wallpaper Mod initialized with game");
+            Log?.LogInfo($"Wallpaper Mod initialized with game. Active mods: {GetActiveModSummary()}");
         }
 
         private void ProcessManager_RequestMainProcessSwitch(On.ProcessManager.orig_RequestMainProcessSwitch_ProcessID orig, ProcessManager self, ProcessManager.ProcessID ID)
@@ -135,7 +141,18 @@ namespace RainWorldWallpaperMod
 
         private void RainWorldGame_ctor(On.RainWorldGame.orig_ctor orig, RainWorldGame self, ProcessManager manager)
         {
-            orig(self, manager);
+            try
+            {
+                orig(self, manager);
+            }
+            catch (Exception ex)
+            {
+                Log?.LogError(
+                    $"RainWorldGame construction failed while wallpaper launch was {pendingWallpaperLaunch}. " +
+                    $"Campaign='{ResolveCampaignString()}', region='{requestedStartRegion}', " +
+                    $"startRoom='{requestedStartRoom}', activeMods=[{GetActiveModSummary()}].\n{ex}");
+                throw;
+            }
 
             if (pendingWallpaperLaunch)
             {
@@ -185,7 +202,7 @@ namespace RainWorldWallpaperMod
             if (activeController != null)
             {
                 // Allow SlugNPCs / Pups to update so they can move and exist
-                if (self.isNPC || self.playerState.isPup || self.Template.type.ToString() == "SlugNPC")
+                if (self.isNPC || self.Template.type.ToString() == "SlugNPC")
                 {
                      orig(self, eu);
                      return;
@@ -334,7 +351,8 @@ namespace RainWorldWallpaperMod
             TrySetField(menuSetup, "startGameCondition", ProcessManager.MenuSetup.StoryGameInitCondition.RegionSelect);
             TrySetField(menuSetup, "loadGame", false);
             TrySetField(menuSetup, "fastTravel", false);
-            TrySetField(menuSetup, "regionSelectRoom", ResolveStartRoom(regionCode));
+            requestedStartRoom = ResolveStartRoom(regionCode);
+            TrySetField(menuSetup, "regionSelectRoom", requestedStartRoom);
 
             // Use the selected campaign from config
             var slugcatName = ResolveSlugcatName();
@@ -356,7 +374,7 @@ namespace RainWorldWallpaperMod
                 return "SU_A01";
             }
 
-            string room = WallpaperRegionCatalog.GetStartRoom(regionCode);
+            string room = WallpaperRegionCatalog.GetStartRoom(regionCode, ResolveCampaignString());
             Log?.LogInfo($"ResolveStartRoom: Region '{regionCode}' -> Room '{room}'");
             return room;
         }
@@ -569,6 +587,24 @@ namespace RainWorldWallpaperMod
 
             index = nextIndex;
             return nextValue;
+        }
+
+        private static string GetActiveModSummary()
+        {
+            try
+            {
+                if (ModManager.ActiveMods == null || ModManager.ActiveMods.Count == 0)
+                {
+                    return "<none>";
+                }
+
+                return string.Join(", ", ModManager.ActiveMods.Select(mod =>
+                    $"{mod.id}@{(string.IsNullOrWhiteSpace(mod.version) ? "unknown" : mod.version)}"));
+            }
+            catch (Exception ex)
+            {
+                return "<unavailable: " + ex.Message + ">";
+            }
         }
     }
 }

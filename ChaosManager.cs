@@ -711,13 +711,12 @@ namespace RainWorldWallpaperMod
 
         private static bool IsValidChaosSpawnRoom(AbstractRoom room)
         {
-            if (room == null || room.gate || room.shelter || IsShelterRoomName(room.name))
+            if (!WallpaperRoomTracker.IsSafeWallpaperRoom(room) || room.shelter || IsShelterRoomName(room.name))
             {
                 return false;
             }
 
-            return !room.name.StartsWith("GATE_", StringComparison.OrdinalIgnoreCase) &&
-                !room.name.StartsWith("OffScreenDen", StringComparison.OrdinalIgnoreCase);
+            return true;
         }
 
         private static bool IsShelterRoomName(string roomName)

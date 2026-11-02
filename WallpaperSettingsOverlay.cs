@@ -77,11 +77,11 @@ namespace RainWorldWallpaperMod
             chaosWarningLabel.scale = 0.85f;
             chaosWarningLabel.color = new Color(1f, 0.7f, 0f, 0.85f);
 
-            instructionsLabel = CreateLabel(100f, 280f, "H -> toggle HUD | Regions change automatically when rain starts");
+            instructionsLabel = CreateLabel(100f, 280f, string.Empty);
             instructionsLabel.scale = 0.9f;
             instructionsLabel.color = new Color(0.7f, 0.85f, 1f, 0.85f);
 
-            closeLabel = CreateLabel(100f, 250f, "Press F1 or Tab to close");
+            closeLabel = CreateLabel(100f, 250f, string.Empty);
             closeLabel.scale = 0.9f;
             closeLabel.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
@@ -97,7 +97,7 @@ namespace RainWorldWallpaperMod
             roomLabel = CreateLabel(100f, 60f, string.Empty);
             lockLabel = CreateLabel(100f, 30f, string.Empty);
 
-            travelInstructions = CreateLabel(100f, 5f, "Right/D -> Next | Left/A -> Prev | Enter/G -> Apply | L -> Lock");
+            travelInstructions = CreateLabel(100f, 5f, string.Empty);
             travelInstructions.scale = 0.9f;
             travelInstructions.color = new Color(0.7f, 0.85f, 1f, 0.65f);
 
@@ -174,7 +174,10 @@ namespace RainWorldWallpaperMod
             }
 
             bool hudAlwaysVisible = controller.Hud?.AlwaysShowHUD ?? false;
-            hudModeLabel.text = $"HUD Always Visible: {(hudAlwaysVisible ? "ON" : "OFF")} (press H to toggle)";
+            hudModeLabel.text = $"HUD Always Visible: {(hudAlwaysVisible ? "ON" : "OFF")} ({GetHudToggleHint()})";
+            instructionsLabel.text = GetOverlayModeHint();
+            closeLabel.text = GetCloseHint();
+            travelInstructions.text = GetTravelHint();
 
             // Update chaos labels
             RefreshChaosLabels();
@@ -358,7 +361,7 @@ namespace RainWorldWallpaperMod
             {
                 foreach (var room in controller.Game.world.abstractRooms)
                 {
-                    if (room != null && !room.gate && !string.IsNullOrEmpty(room.name))
+                    if (WallpaperRoomTracker.IsSafeWallpaperRoom(room))
                     {
                         availableRooms.Add(room.name);
                     }
@@ -654,8 +657,38 @@ namespace RainWorldWallpaperMod
                 case "Normal": return "Clean";
                 case "Rotted": return "Rotted";
                 case "Karma": return "Karma Flowers";
+                case "RottedKarma": return "Rot + Karma";
                 default: return enumName;
             }
+        }
+
+        private bool IsControllerInputActive()
+        {
+            return controller?.ActiveInputDevice == WallpaperInputDevice.Controller;
+        }
+
+        private string GetHudToggleHint()
+        {
+            return IsControllerInputActive() ? "press Y to toggle" : "press H to toggle";
+        }
+
+        private string GetOverlayModeHint()
+        {
+            return IsControllerInputActive()
+                ? "Y -> toggle HUD | LB/RB changes regions outside settings"
+                : "H -> toggle HUD | Regions change automatically when rain starts";
+        }
+
+        private string GetCloseHint()
+        {
+            return IsControllerInputActive() ? "Press B or Start to close" : "Press F1 or Tab to close";
+        }
+
+        private string GetTravelHint()
+        {
+            return IsControllerInputActive()
+                ? "Stick -> Select | A -> Apply | B -> Close | X -> Lock | Y -> HUD"
+                : "Right/D -> Next | Left/A -> Prev | Enter/G -> Apply | L -> Lock";
         }
     }
 }

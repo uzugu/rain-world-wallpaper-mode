@@ -61,6 +61,7 @@ The in-game overlay exposes:
 - campaign selection
 - region selection
 - camera mode selection
+- Watcher world-state selection: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma
 - room quick travel within the current region
 - room lock toggle
 - chaos mode toggle and level
@@ -68,6 +69,18 @@ The in-game overlay exposes:
 - no-rain-wait toggle
 
 Most changes apply immediately. Region-dependent changes fully take effect on the next region load.
+
+## Watcher World States
+
+The Watcher state selector uses the DLC's room systems:
+
+- `Natural Mix`: generates a session-only Watcher-style rot mixture for the current region and refreshes that pattern while you watch.
+- `Clean`: clears wallpaper-injected Watcher rot and karma-flower state.
+- `Rotted`: applies sentient rot infection to rooms through Watcher's region state.
+- `Karma Flowers`: adds cosmetic karma flower patches and flower wind to loaded rooms.
+- `Rot + Karma`: combines sentient rot infection, karma flower patches, and flower wind in the same room.
+
+Some Watcher rooms have rot, flowers, or special objects authored directly into their room files. The mod does not erase those original room designs.
 
 ## Camera Modes
 
@@ -100,6 +113,14 @@ Echoes can appear naturally in eligible rooms. When this happens:
 
 - Confirm the mod is enabled in Remix.
 - Confirm `modinfo.json` and `plugins/RainWorldWallpaperMod.dll` are both present in the installed mod folder.
+- Open `BepInEx/LogOutput.log` and find `Wallpaper Mod initialized with game`. The line now records exact active mod IDs and versions; include it when reporting a compatibility problem.
+
+### A region falls back, freezes, or has the wrong name
+
+- Region names are read from Rain World's campaign-specific `DisplayName` files.
+- Region availability is read from the game's Story/Optional lists; CRS custom regions must be marked compatible in their `MetaProperties.txt`.
+- Start rooms use the region author's `safariStartRoom` when present and otherwise must exist in the resolved world file.
+- Constructor failures log the selected campaign, region, resolved start room, active mod versions, and full exception in `BepInEx/LogOutput.log`.
 
 ### The mod builds but Rain World does not load it
 

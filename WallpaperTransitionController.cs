@@ -77,7 +77,8 @@ namespace RainWorldWallpaperMod
 
         public bool StartTransitionToSpecificRoom(AbstractRoom targetRoom, WallpaperSessionState sessionState)
         {
-            if (targetRoom == null || game.cameras == null || game.cameras.Length == 0)
+            if (!WallpaperRoomTracker.IsSafeWallpaperRoom(targetRoom) ||
+                game.cameras == null || game.cameras.Length == 0)
             {
                 return false;
             }

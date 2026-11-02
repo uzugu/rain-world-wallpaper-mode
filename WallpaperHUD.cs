@@ -30,7 +30,7 @@ namespace RainWorldWallpaperMod
         private bool isVisible = true;
 
         // Configuration (will be loaded from config)
-        private bool alwaysShowHUD = true;
+        private bool alwaysShowHUD;
 
         public bool IsReady { get; private set; }
         public bool AlwaysShowHUD => alwaysShowHUD;
@@ -175,7 +175,7 @@ namespace RainWorldWallpaperMod
             }
         }
 
-        public void SetAlwaysShowHUD(bool value)
+        public void SetAlwaysShowHUD(bool value, bool hideImmediately = false)
         {
             alwaysShowHUD = value;
 
@@ -196,8 +196,13 @@ namespace RainWorldWallpaperMod
             else
             {
                 idleTimer = 0f;
-                targetAlpha = 1f;
-                isVisible = true;
+                targetAlpha = hideImmediately ? 0f : 1f;
+                isVisible = !hideImmediately;
+                if (hideImmediately)
+                {
+                    currentAlpha = 0f;
+                    UpdateAlpha();
+                }
             }
         }
 
@@ -255,7 +260,17 @@ namespace RainWorldWallpaperMod
                 regionTimeLabel.text = $"Rain-based regions: Waiting for rain... | Regions {controller.RegionsExplored}/{controller.TotalRegions}";
             }
 
-            controlHintLabel.text = "Controls: Right/D Next | Left/A Prev | Up/Down Cam | L Lock | F1/Tab Settings";
+            controlHintLabel.text = GetControlHint();
+        }
+
+        private string GetControlHint()
+        {
+            if (controller.ActiveInputDevice == WallpaperInputDevice.Controller)
+            {
+                return "Controls: Stick Rooms/Cam | A Skip | LB/RB Region | X Lock | Y HUD | Start Settings";
+            }
+
+            return "Controls: Right/D Next | Left/A Prev | Up/Down Cam | N Skip | G/B Region | F1/Tab Settings";
         }
 
         private string GetRegionName(string regionCode)

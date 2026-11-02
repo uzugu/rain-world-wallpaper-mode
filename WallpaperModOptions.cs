@@ -39,6 +39,7 @@ namespace RainWorldWallpaperMod
             UW,  // The Exterior
             SS,  // Five Pebbles
             SB,  // Subterranean
+            UG,  // Undergrowth (Downpour)
             LM,  // Waterfront Facility (Downpour)
             RM,  // The Rot (Downpour)
             DM,  // Looks to the Moon (Downpour)
@@ -47,6 +48,7 @@ namespace RainWorldWallpaperMod
             VS,  // Pipeyard (Downpour)
             CL,  // Silent Construct (Downpour)
             OE,  // Outer Expanse (Downpour)
+            HR,  // Rubicon (Downpour)
             WVWA,
             WVWB,
             WRRA,
@@ -92,7 +94,8 @@ namespace RainWorldWallpaperMod
             Natural,    // Session-generated Watcher-style mixed rot progression
             Normal,     // Clean world, no rot effects (like WMPA)
             Rotted,     // Sentient Rot Spores active, incremental progression
-            Karma       // Karma flowers everywhere, FlowerWind active (like WORA)
+            Karma,      // Karma flowers everywhere, FlowerWind active (like WORA)
+            RottedKarma // Sentient Rot and karma flowers together
         }
 
         // Configuration values
@@ -118,7 +121,7 @@ namespace RainWorldWallpaperMod
             TransitionDuration = config.Bind("transitionDuration", 5f);
             StayDuration = config.Bind("stayDuration", 15f);
             HudFadeDelay = config.Bind("hudFadeDelay", 3f);
-            AlwaysShowHud = config.Bind("alwaysShowHud", true);
+            AlwaysShowHud = config.Bind("alwaysShowHud", false);
             EnableEchoes = config.Bind("enableEchoes", true);
             StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
             SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
@@ -174,7 +177,7 @@ namespace RainWorldWallpaperMod
                 // Always Show HUD
                 OpCheckBox alwaysShowHudBox = new OpCheckBox(AlwaysShowHud, new Vector2(leftColumnControl, leftYPos));
                 alwaysShowHudBox.description = "If enabled, the HUD will always be visible and won't fade out";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Show HUD:"));
+                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Always HUD:"));
                 uiElements.Add(alwaysShowHudBox);
                 leftYPos -= lineHeight;
 
@@ -286,13 +289,14 @@ namespace RainWorldWallpaperMod
                     StartRegion,
                     new Vector2(rightColumnControl, regionYPos - 5f),
                     140f,
-                    OpResourceSelector.GetEnumNames(null, typeof(RegionChoice)).Select(li =>
-                    {
-                        li.displayName = GetRegionDisplayName(li.name);
-                        return li;
-                    }).ToList()
+                    WallpaperRegionCatalog.GetAllSelectableRegions()
+                        .Select((regionCode, index) => new ListItem(regionCode, index)
+                        {
+                            displayName = GetRegionDisplayName(regionCode)
+                        })
+                        .ToList()
                 ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                regionDropdown.description = "Choose starting region";
+                regionDropdown.description = "Choose a starting region available to at least one installed campaign";
 
                 var cameraModeDropdown = new OpComboBox(
                     CameraModeConfig,
@@ -316,7 +320,7 @@ namespace RainWorldWallpaperMod
                         return li;
                     }).ToList()
                 ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                rotStateDropdown.description = "Watcher environmental state: Natural Mix, Clean, Rotted, or Karma Flowers";
+                rotStateDropdown.description = "Watcher environmental state: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma";
 
                 // Add dropdowns last to ensure they render on top
                 opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown, rotStateDropdown });
@@ -348,51 +352,18 @@ namespace RainWorldWallpaperMod
 
         private string GetRegionDisplayName(string enumName)
         {
-            switch (enumName)
+            string displayName = WallpaperRegionCatalog.GetDisplayName(enumName, SelectedCampaign.Value);
+            if (WallpaperRegionCatalog.WatcherRegions.Contains(enumName, StringComparer.OrdinalIgnoreCase))
             {
-                case "LM":
-                case "RM":
-                case "DM":
-                case "LC":
-                case "MS":
-                case "VS":
-                case "CL":
-                case "OE":
-                    return WallpaperRegionCatalog.GetDisplayName(enumName) + " (DP)";
-                case "WVWA":
-                case "WVWB":
-                case "WRRA":
-                case "WPGA":
-                case "WARA":
-                case "WARB":
-                case "WARC":
-                case "WARD":
-                case "WARE":
-                case "WARF":
-                case "WARG":
-                case "WMPA":
-                case "WAUA":
-                case "WBLA":
-                case "WPTA":
-                case "WRFA":
-                case "WRFB":
-                case "WRSA":
-                case "WSKA":
-                case "WSKB":
-                case "WSKC":
-                case "WSKD":
-                case "WTDA":
-                case "WTDB":
-                case "WORA":
-                case "WDSR":
-                case "WGWR":
-                case "WHIR":
-                case "WSSR":
-                case "WSUR":
-                    return WallpaperRegionCatalog.GetDisplayName(enumName) + " (Watcher)";
-                default:
-                    return WallpaperRegionCatalog.GetDisplayName(enumName);
+                return displayName + " (Watcher)";
             }
+
+            if (WallpaperRegionCatalog.DownpourRegions.Contains(enumName, StringComparer.OrdinalIgnoreCase))
+            {
+                return displayName + " (DP)";
+            }
+
+            return displayName;
         }
 
         public override void Update()
@@ -484,12 +455,13 @@ namespace RainWorldWallpaperMod
         // Helper method to get region code string
         public static string GetRegionCode(string regionStr)
         {
-            // Already a string, just validate and return
-            if (Enum.TryParse<RegionChoice>(regionStr, out var region))
+            if (string.IsNullOrWhiteSpace(regionStr))
             {
-                return region.ToString();
+                return "SU";
             }
-            return "SU"; // Default to Outskirts
+
+            string normalized = regionStr.Trim().ToUpperInvariant();
+            return WallpaperRegionCatalog.IsKnownRegion(normalized) ? normalized : "SU";
         }
 
         // Helper method to convert camera mode string to enum
@@ -532,6 +504,7 @@ namespace RainWorldWallpaperMod
                 case "Normal": return "Clean";
                 case "Rotted": return "Rotted (Rot Spread)";
                 case "Karma": return "Karma Flowers";
+                case "RottedKarma": return "Rot + Karma Flowers";
                 default: return enumName;
             }
         }

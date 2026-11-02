@@ -13,6 +13,7 @@ namespace RainWorldWallpaperMod
         public EchoMusicManager EchoMusic { get; private set; }
         public ChaosManager ChaosManager { get; private set; }
         public WallpaperHUD Hud => uiController.Hud;
+        public WallpaperInputDevice ActiveInputDevice => inputState.ActiveDevice;
 
         // Transition settings
         private float transitionDuration = 5f;
@@ -25,7 +26,6 @@ namespace RainWorldWallpaperMod
         private bool isRoomLocked = false;
 
         private readonly System.Random random = new System.Random();
-        private bool axisSkipActive;
         private readonly WallpaperInputState inputState = new WallpaperInputState();
 
         // Rot state tracking for Watcher campaign
@@ -78,6 +78,7 @@ namespace RainWorldWallpaperMod
         /// </summary>
         public void Update(float dt)
         {
+            UpdateActiveInputDevice();
             HandleCriticalInput();
 
             if (Game == null || Game.cameras == null || Game.cameras.Length == 0)
@@ -145,7 +146,6 @@ namespace RainWorldWallpaperMod
             RegionManager?.Cleanup();
             EchoMusic?.Shutdown();
             ChaosManager?.Shutdown();
-            axisSkipActive = false;
             inputState.Reset();
             rainCycleController.Clear();
 
@@ -158,17 +158,17 @@ namespace RainWorldWallpaperMod
 
         private void HandleCriticalInput()
         {
-            bool pauseButton = Input.GetKey(KeyCode.Escape);
+            bool pauseButton = !uiController.IsSettingsActive && IsPauseDown();
             if (inputState.WasPressed(WallpaperInputButton.Pause, pauseButton))
             {
-                WallpaperMod.Log?.LogInfo("WallpaperController: ESC pressed, returning to main menu");
+                WallpaperMod.Log?.LogInfo("WallpaperController: Return-to-menu input pressed");
                 if (Game?.manager != null)
                 {
                     Game.manager.RequestMainProcessSwitch(ProcessManager.ProcessID.MainMenu);
                 }
             }
 
-            bool toggleOverlayButton = Input.GetKey(KeyCode.F1) || Input.GetKey(KeyCode.Tab);
+            bool toggleOverlayButton = IsToggleOverlayDown();
             if (inputState.WasPressed(WallpaperInputButton.ToggleOverlay, toggleOverlayButton))
             {
                 uiController.ToggleSettingsMenu(GetPrimaryCamera(), this);
@@ -209,56 +209,10 @@ namespace RainWorldWallpaperMod
             if (settingsActive)
             {
                 HandleOverlayInput(settingsOverlay);
-            }
-            else
-            {
-                HandleNormalInput();
+                return;
             }
 
-            bool nextRoomButton = Input.GetKey(KeyCode.N);
-            if (inputState.WasPressed(WallpaperInputButton.NextRoom, nextRoomButton))
-            {
-                uiController.RegisterUserActivity();
-                ForceImmediateLocationChange();
-            }
-
-            bool regionForwardButton = Input.GetKey(KeyCode.G);
-            if (!settingsActive && inputState.WasPressed(WallpaperInputButton.RegionForward, regionForwardButton) && !sessionState.IsPreparingWorldReload)
-            {
-                uiController.RegisterUserActivity();
-                RegionManager?.AdvanceToNextRegion();
-            }
-
-            bool regionBackButton = Input.GetKey(KeyCode.B);
-            if (inputState.WasPressed(WallpaperInputButton.RegionBack, regionBackButton) && !sessionState.IsPreparingWorldReload)
-            {
-                uiController.RegisterUserActivity();
-                RegionManager?.AdvanceToPreviousRegion();
-            }
-
-            bool lockButton = Input.GetKey(KeyCode.L);
-            if (inputState.WasPressed(WallpaperInputButton.Lock, lockButton))
-            {
-                ToggleRoomLock();
-            }
-
-            bool camUpButton = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W);
-            if (inputState.WasPressed(WallpaperInputButton.Up, camUpButton))
-            {
-                CycleCameraPosition(1);
-            }
-
-            bool camDownButton = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
-            if (inputState.WasPressed(WallpaperInputButton.Down, camDownButton))
-            {
-                CycleCameraPosition(-1);
-            }
-
-            bool navLeftButton = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A);
-            if (inputState.WasPressed(WallpaperInputButton.Left, navLeftButton))
-            {
-                GoToPreviousRoom();
-            }
+            HandleNormalInput();
         }
 
         private bool CanRunWallpaperSession()
@@ -321,12 +275,13 @@ namespace RainWorldWallpaperMod
 
         private void RegisterUserActivityFromAnyInput()
         {
-            bool anyKeyPressed = Input.anyKeyDown
+            bool anyInput = Input.anyKeyDown
                 || Input.GetMouseButtonDown(0)
                 || Input.GetMouseButtonDown(1)
-                || Input.GetMouseButtonDown(2);
+                || Input.GetMouseButtonDown(2)
+                || HasControllerAxisActivity();
 
-            if (anyKeyPressed)
+            if (anyInput)
             {
                 uiController.RegisterUserActivity();
             }
@@ -336,35 +291,52 @@ namespace RainWorldWallpaperMod
         {
             bool overlayDirty = false;
 
-            if (inputState.WasPressed(WallpaperInputButton.Up, Input.GetKey(KeyCode.UpArrow)))
+            if (inputState.WasPressed(WallpaperInputButton.Up, IsMoveUpDown()))
             {
                 settingsOverlay?.CycleFocus(-1);
                 overlayDirty = true;
             }
 
-            if (inputState.WasPressed(WallpaperInputButton.Down, Input.GetKey(KeyCode.DownArrow)))
+            if (inputState.WasPressed(WallpaperInputButton.Down, IsMoveDownDown()))
             {
                 settingsOverlay?.CycleFocus(1);
                 overlayDirty = true;
             }
 
-            if (inputState.WasPressed(WallpaperInputButton.Right, Input.GetKey(KeyCode.RightArrow)))
+            if (inputState.WasPressed(WallpaperInputButton.Right, IsMoveRightDown()))
             {
                 settingsOverlay?.CycleCurrentSelection(1);
                 overlayDirty = true;
             }
 
-            if (inputState.WasPressed(WallpaperInputButton.Left, Input.GetKey(KeyCode.LeftArrow)))
+            if (inputState.WasPressed(WallpaperInputButton.Left, IsMoveLeftDown()))
             {
                 settingsOverlay?.CycleCurrentSelection(-1);
                 overlayDirty = true;
             }
 
-            bool enterButton = Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter) || Input.GetKey(KeyCode.G);
+            bool enterButton = Input.GetKey(KeyCode.Return)
+                || Input.GetKey(KeyCode.KeypadEnter)
+                || Input.GetKey(KeyCode.G)
+                || IsControllerAcceptDown();
             if (inputState.WasPressed(WallpaperInputButton.Enter, enterButton))
             {
                 settingsOverlay?.ApplyTravel();
                 uiController.ToggleSettingsMenu(GetPrimaryCamera(), this);
+            }
+
+            bool cancelButton = Input.GetKey(KeyCode.Escape) || IsControllerCancelDown();
+            if (inputState.WasPressed(WallpaperInputButton.Cancel, cancelButton))
+            {
+                uiController.ToggleSettingsMenu(GetPrimaryCamera(), this);
+                overlayDirty = true;
+            }
+
+            bool lockButton = Input.GetKey(KeyCode.L) || IsControllerLockDown();
+            if (inputState.WasPressed(WallpaperInputButton.Lock, lockButton))
+            {
+                settingsOverlay?.ToggleLockShortcut();
+                overlayDirty = true;
             }
 
             if (TryToggleHud(showLogMessage: false))
@@ -384,48 +356,80 @@ namespace RainWorldWallpaperMod
 
             bool nextRoomRequested = inputState.WasPressed(
                 WallpaperInputButton.Right,
-                Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D));
-
-            float horizontalAxis = 0f;
-            try
-            {
-                horizontalAxis = Input.GetAxisRaw("Horizontal");
-            }
-            catch
-            {
-            }
-
-            if (horizontalAxis > 0.6f)
-            {
-                if (!axisSkipActive)
-                {
-                    nextRoomRequested = true;
-                    axisSkipActive = true;
-                }
-            }
-            else if (horizontalAxis < 0.2f && horizontalAxis > -0.2f)
-            {
-                axisSkipActive = false;
-            }
+                IsMoveRightDown());
 
             if (nextRoomRequested)
             {
                 uiController.RegisterUserActivity();
                 ForceImmediateLocationChange();
             }
+
+            bool skipButton = Input.GetKey(KeyCode.N) || IsControllerAcceptDown();
+            if (inputState.WasPressed(WallpaperInputButton.NextRoom, skipButton))
+            {
+                uiController.RegisterUserActivity();
+                ForceImmediateLocationChange();
+            }
+
+            bool previousRoomRequested = inputState.WasPressed(
+                WallpaperInputButton.Left,
+                IsMoveLeftDown());
+
+            if (previousRoomRequested)
+            {
+                uiController.RegisterUserActivity();
+                GoToPreviousRoom();
+            }
+
+            bool camUpButton = IsMoveUpDown();
+            if (inputState.WasPressed(WallpaperInputButton.Up, camUpButton))
+            {
+                uiController.RegisterUserActivity();
+                CycleCameraPosition(1);
+            }
+
+            bool camDownButton = IsMoveDownDown();
+            if (inputState.WasPressed(WallpaperInputButton.Down, camDownButton))
+            {
+                uiController.RegisterUserActivity();
+                CycleCameraPosition(-1);
+            }
+
+            bool regionForwardButton = Input.GetKey(KeyCode.G) || IsControllerRegionForwardDown();
+            if (inputState.WasPressed(WallpaperInputButton.RegionForward, regionForwardButton) && !sessionState.IsPreparingWorldReload)
+            {
+                uiController.RegisterUserActivity();
+                RegionManager?.AdvanceToNextRegion();
+            }
+
+            bool regionBackButton = Input.GetKey(KeyCode.B) || IsControllerRegionBackDown();
+            if (inputState.WasPressed(WallpaperInputButton.RegionBack, regionBackButton) && !sessionState.IsPreparingWorldReload)
+            {
+                uiController.RegisterUserActivity();
+                RegionManager?.AdvanceToPreviousRegion();
+            }
+
+            bool lockButton = Input.GetKey(KeyCode.L) || IsControllerLockDown();
+            if (inputState.WasPressed(WallpaperInputButton.Lock, lockButton))
+            {
+                ToggleRoomLock();
+            }
         }
 
         private bool TryToggleHud(bool showLogMessage)
         {
-            bool hudToggleButton = Input.GetKey(KeyCode.H);
+            bool hudToggleButton = Input.GetKey(KeyCode.H) || IsControllerHudToggleDown();
             if (!inputState.WasPressed(WallpaperInputButton.HudToggle, hudToggleButton) || Hud == null)
             {
                 return false;
             }
 
             bool newValue = !Hud.AlwaysShowHUD;
-            Hud.SetAlwaysShowHUD(newValue);
-            uiController.RegisterUserActivity();
+            Hud.SetAlwaysShowHUD(newValue, hideImmediately: !newValue);
+            if (newValue)
+            {
+                uiController.RegisterUserActivity();
+            }
             uiController.RefreshOverlay();
 
             if (showLogMessage)
@@ -434,6 +438,169 @@ namespace RainWorldWallpaperMod
             }
 
             return true;
+        }
+
+        private void UpdateActiveInputDevice()
+        {
+            bool controllerInput = IsAnyControllerButtonDown() || HasControllerAxisActivity();
+            bool keyboardMouseInput = IsAnyKeyboardControlDown()
+                || Input.GetMouseButton(0)
+                || Input.GetMouseButton(1)
+                || Input.GetMouseButton(2);
+
+            bool changed = false;
+            if (controllerInput && !keyboardMouseInput)
+            {
+                changed = inputState.SetActiveDevice(WallpaperInputDevice.Controller);
+            }
+            else if (keyboardMouseInput)
+            {
+                changed = inputState.SetActiveDevice(WallpaperInputDevice.KeyboardMouse);
+            }
+
+            if (changed)
+            {
+                uiController.RefreshOverlay();
+            }
+        }
+
+        private bool IsPauseDown()
+        {
+            return Input.GetKey(KeyCode.Escape) || Input.GetKey(KeyCode.JoystickButton6);
+        }
+
+        private bool IsToggleOverlayDown()
+        {
+            return Input.GetKey(KeyCode.F1)
+                || Input.GetKey(KeyCode.Tab)
+                || Input.GetKey(KeyCode.JoystickButton7);
+        }
+
+        private bool IsMoveRightDown()
+        {
+            return Input.GetKey(KeyCode.RightArrow)
+                || Input.GetKey(KeyCode.D)
+                || ReadAxisRaw("Horizontal") > 0.6f;
+        }
+
+        private bool IsMoveLeftDown()
+        {
+            return Input.GetKey(KeyCode.LeftArrow)
+                || Input.GetKey(KeyCode.A)
+                || ReadAxisRaw("Horizontal") < -0.6f;
+        }
+
+        private bool IsMoveUpDown()
+        {
+            return Input.GetKey(KeyCode.UpArrow)
+                || Input.GetKey(KeyCode.W)
+                || ReadAxisRaw("Vertical") > 0.6f;
+        }
+
+        private bool IsMoveDownDown()
+        {
+            return Input.GetKey(KeyCode.DownArrow)
+                || Input.GetKey(KeyCode.S)
+                || ReadAxisRaw("Vertical") < -0.6f;
+        }
+
+        private bool IsControllerAcceptDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton0);
+        }
+
+        private bool IsControllerCancelDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton1);
+        }
+
+        private bool IsControllerLockDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton2);
+        }
+
+        private bool IsControllerHudToggleDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton3);
+        }
+
+        private bool IsControllerRegionBackDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton4);
+        }
+
+        private bool IsControllerRegionForwardDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton5);
+        }
+
+        private bool IsAnyKeyboardControlDown()
+        {
+            return Input.GetKey(KeyCode.Escape)
+                || Input.GetKey(KeyCode.F1)
+                || Input.GetKey(KeyCode.Tab)
+                || Input.GetKey(KeyCode.Return)
+                || Input.GetKey(KeyCode.KeypadEnter)
+                || Input.GetKey(KeyCode.UpArrow)
+                || Input.GetKey(KeyCode.DownArrow)
+                || Input.GetKey(KeyCode.LeftArrow)
+                || Input.GetKey(KeyCode.RightArrow)
+                || Input.GetKey(KeyCode.W)
+                || Input.GetKey(KeyCode.A)
+                || Input.GetKey(KeyCode.S)
+                || Input.GetKey(KeyCode.D)
+                || Input.GetKey(KeyCode.N)
+                || Input.GetKey(KeyCode.G)
+                || Input.GetKey(KeyCode.B)
+                || Input.GetKey(KeyCode.L)
+                || Input.GetKey(KeyCode.H);
+        }
+
+        private bool IsAnyControllerButtonDown()
+        {
+            return Input.GetKey(KeyCode.JoystickButton0)
+                || Input.GetKey(KeyCode.JoystickButton1)
+                || Input.GetKey(KeyCode.JoystickButton2)
+                || Input.GetKey(KeyCode.JoystickButton3)
+                || Input.GetKey(KeyCode.JoystickButton4)
+                || Input.GetKey(KeyCode.JoystickButton5)
+                || Input.GetKey(KeyCode.JoystickButton6)
+                || Input.GetKey(KeyCode.JoystickButton7)
+                || Input.GetKey(KeyCode.JoystickButton8)
+                || Input.GetKey(KeyCode.JoystickButton9)
+                || Input.GetKey(KeyCode.JoystickButton10)
+                || Input.GetKey(KeyCode.JoystickButton11)
+                || Input.GetKey(KeyCode.JoystickButton12)
+                || Input.GetKey(KeyCode.JoystickButton13)
+                || Input.GetKey(KeyCode.JoystickButton14)
+                || Input.GetKey(KeyCode.JoystickButton15)
+                || Input.GetKey(KeyCode.JoystickButton16)
+                || Input.GetKey(KeyCode.JoystickButton17)
+                || Input.GetKey(KeyCode.JoystickButton18)
+                || Input.GetKey(KeyCode.JoystickButton19);
+        }
+
+        private bool HasControllerAxisActivity()
+        {
+            if (IsAnyKeyboardControlDown())
+            {
+                return false;
+            }
+
+            return Mathf.Abs(ReadAxisRaw("Horizontal")) > 0.6f
+                || Mathf.Abs(ReadAxisRaw("Vertical")) > 0.6f;
+        }
+
+        private float ReadAxisRaw(string axisName)
+        {
+            try
+            {
+                return Input.GetAxisRaw(axisName);
+            }
+            catch
+            {
+                return 0f;
+            }
         }
 
         private void EnsureSpectatorState()
@@ -560,7 +727,6 @@ namespace RainWorldWallpaperMod
             sessionState.PrepareForReload();
             roomTracker.Reset();
             uiController.ResetForReload();
-            axisSkipActive = false;
             inputState.Reset();
             rainCycleController.Clear();
             spectatorState.Reset();
@@ -676,7 +842,8 @@ namespace RainWorldWallpaperMod
             AbstractRoom targetRoom = null;
             foreach (var room in Game.world.abstractRooms)
             {
-                if (room != null && string.Equals(room.name, roomName, StringComparison.OrdinalIgnoreCase))
+                if (WallpaperRoomTracker.IsSafeWallpaperRoom(room) &&
+                    string.Equals(room.name, roomName, StringComparison.OrdinalIgnoreCase))
                 {
                     targetRoom = room;
                     break;

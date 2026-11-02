@@ -7,6 +7,14 @@ namespace RainWorldWallpaperMod
     {
         private const int MaxHistory = 10;
 
+        // Rain World's Room loader gives these Oracle chambers special story
+        // treatment and spawns an Oracle when they realize. Wallpaper Mode has
+        // no player, so those scripts can crash or start unwanted cutscenes.
+        private static readonly HashSet<string> UnsafeStoryRooms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "SS_AI", "SL_AI", "DM_AI", "CL_AI", "RM_AI", "HR_AI", "Multi_SL_AI"
+        };
+
         private readonly System.Random random;
         private readonly List<string> roomHistory = new List<string>();
         private readonly List<int> unvisitedPositions = new List<int>();
@@ -84,7 +92,7 @@ namespace RainWorldWallpaperMod
 
             foreach (var room in rooms)
             {
-                if (room == null || room.gate)
+                if (!IsSafeWallpaperRoom(room))
                 {
                     continue;
                 }
@@ -103,7 +111,7 @@ namespace RainWorldWallpaperMod
 
                 foreach (var room in rooms)
                 {
-                    if (room != null && !room.gate)
+                    if (IsSafeWallpaperRoom(room))
                     {
                         availableRooms.Add(room);
                     }
@@ -116,6 +124,23 @@ namespace RainWorldWallpaperMod
             }
 
             return availableRooms[random.Next(availableRooms.Count)];
+        }
+
+        public static bool IsSafeWallpaperRoom(AbstractRoom room)
+        {
+            return room != null &&
+                !room.gate &&
+                !room.offScreenDen &&
+                !string.IsNullOrWhiteSpace(room.name) &&
+                !UnsafeStoryRooms.Contains(room.name);
+        }
+
+        public static bool IsSafeWallpaperRoomName(string roomName)
+        {
+            return !string.IsNullOrWhiteSpace(roomName) &&
+                roomName.IndexOf("GATE", StringComparison.OrdinalIgnoreCase) < 0 &&
+                !roomName.StartsWith("OffScreenDen_", StringComparison.OrdinalIgnoreCase) &&
+                !UnsafeStoryRooms.Contains(roomName);
         }
 
         public int SelectCameraPosition(int availablePositions, bool isNewRoom)

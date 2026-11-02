@@ -14,6 +14,8 @@ Rain World Wallpaper Mode turns Rain World into a hands-free animated wallpaper.
 - Auto-hiding or always-visible HUD
 - Optional chaos spawning with configurable intensity
 - Natural echo support with echo music handling
+- Campaign-aware region lists, including CRS custom regions marked Story/Optional by their authors
+- Watcher campaign regions and Watcher world-state modes, including Rot + Karma
 - Remix configuration for persistent defaults
 
 ## Quick Start
@@ -74,6 +76,8 @@ Region changes are tied to the rain cycle:
 - Standard mode starts a random countdown once the cycle reaches 85%.
 - `No Rain Wait` changes regions immediately at 95%.
 - After all regions in the current campaign have been visited, the mod advances to the next campaign.
+- Region availability comes from Rain World's Story/Optional region APIs. Custom Regions Support extends those APIs from each region's `MetaProperties.txt`, so compatible custom regions join the tour automatically.
+- Special sequence-only areas that Rain World does not expose as Story/Optional regions are not forced through normal Region Select.
 
 ## Installation
 
@@ -88,6 +92,16 @@ Region changes are tied to the rain cycle:
 Build output location:
 
 `artifacts/bin/RainWorldWallpaperMod/<Configuration>_AnyCPU/mod/`
+
+## Updating The Mod
+
+When updating an existing local or Workshop install, bump the version in `assets/modinfo.json`, `RainWorldWallpaperMod.csproj`, and the `BepInPlugin` attribute in `WallpaperMod.cs`, then build `Release` and install or upload the packaged folder from:
+
+`artifacts/bin/RainWorldWallpaperMod/Release_AnyCPU/mod/`
+
+After replacing the files or updating the Workshop item, disable and re-enable the mod in Remix before testing. Remix may show the new version number while still holding stale plugin/options state until the mod is toggled or Rain World is restarted.
+
+For the full checklist, see `WORKSHOP_PUBLISHING.md`.
 
 ## Development
 
@@ -137,6 +151,7 @@ The Remix UI exposes:
 - spawn all
 - no-rain-wait
 - rain countdown min/max
+- Watcher world state: natural mix, clean, rotted, karma flowers, or Rot + Karma
 
 ### In-Game Overlay
 
@@ -145,6 +160,7 @@ The overlay exposes the live wallpaper session:
 - campaign quick travel
 - region quick travel
 - camera mode changes
+- Watcher world-state changes
 - room quick travel
 - room lock
 - chaos toggles
