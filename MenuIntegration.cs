@@ -30,6 +30,9 @@ namespace RainWorldWallpaperMod
 
         private static void MainMenu_ctor(On.Menu.MainMenu.orig_ctor orig, MainMenu self, ProcessManager manager, bool showRegionSpecificBkg)
         {
+            // Put the player's own slugcat selection back after a wallpaper session, before the menu reads it.
+            WallpaperMod.Instance?.RestoreSelectedSlugcat(manager);
+
             // Call original constructor
             orig(self, manager, showRegionSpecificBkg);
 

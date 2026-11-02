@@ -20,6 +20,8 @@ namespace RainWorldWallpaperMod
         private bool autoLaunchWallpaperConsumed;
         private WallpaperController activeController;
         private bool constructingWallpaperGame;
+        private SlugcatStats.Name slugcatBeforeWallpaper;
+        private bool hasSlugcatBeforeWallpaper;
         private string requestedStartRegion = "SU";
         private string requestedStartRoom = "SU_A01";
         private string commandLineStartRegion;
@@ -432,25 +434,27 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            var menuSetup = manager.menuSetup;
             var rainWorld = manager.rainWorld;
 
-            TrySetField(menuSetup, "startGameCondition", ProcessManager.MenuSetup.StoryGameInitCondition.RegionSelect);
-            TrySetField(menuSetup, "loadGame", false);
-            TrySetField(menuSetup, "fastTravel", false);
+            manager.menuSetup.startGameCondition = ProcessManager.MenuSetup.StoryGameInitCondition.RegionSelect;
             requestedStartRoom = ResolveStartRoom(regionCode);
-            TrySetField(menuSetup, "regionSelectRoom", requestedStartRoom);
+            manager.menuSetup.regionSelectRoom = requestedStartRoom;
 
-            // Use the selected campaign from config
+            // The story session plays as progression.PlayingAsSlugcat, which falls back to the selected slugcat once the
+            // in-memory save state is cleared. Remember the player's own choice so the main menu can put it back.
             var slugcatName = ResolveSlugcatName();
-            TrySetField(menuSetup, "playerCharacter", slugcatName);
-
             rainWorld?.progression?.ClearOutSaveStateFromMemory();
-            if (rainWorld?.progression?.miscProgressionData != null)
+            var miscProgression = rainWorld?.progression?.miscProgressionData;
+            if (miscProgression != null)
             {
-                TrySetField(rainWorld.progression.miscProgressionData, "currentlySelectedSinglePlayerSlugcat", slugcatName);
-            }
+                if (!hasSlugcatBeforeWallpaper)
+                {
+                    slugcatBeforeWallpaper = miscProgression.currentlySelectedSinglePlayerSlugcat;
+                    hasSlugcatBeforeWallpaper = true;
+                }
 
+                miscProgression.currentlySelectedSinglePlayerSlugcat = slugcatName;
+            }
         }
 
         private string ResolveStartRoom(string regionCode)
@@ -466,31 +470,20 @@ namespace RainWorldWallpaperMod
             return room;
         }
 
-        private static void TrySetField(object target, string fieldName, object value)
+        // Called before the main menu is built, so the player's slugcat choice is back before anything saves it.
+        internal void RestoreSelectedSlugcat(ProcessManager manager)
         {
-            if (target == null || string.IsNullOrEmpty(fieldName))
+            if (!hasSlugcatBeforeWallpaper)
             {
                 return;
             }
 
-            var type = target.GetType();
-            var field = type.GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            if (field == null)
+            hasSlugcatBeforeWallpaper = false;
+            var miscProgression = manager?.rainWorld?.progression?.miscProgressionData;
+            if (miscProgression != null)
             {
-                return;
+                miscProgression.currentlySelectedSinglePlayerSlugcat = slugcatBeforeWallpaper;
             }
-
-            if (value == null && field.FieldType.IsValueType)
-            {
-                return;
-            }
-
-            if (value != null && !field.FieldType.IsAssignableFrom(value.GetType()))
-            {
-                return;
-            }
-
-            field.SetValue(target, value);
         }
 
         private string ResolveInitialRegion()
