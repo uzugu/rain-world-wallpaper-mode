@@ -103,7 +103,6 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<float> StayDuration;
         public readonly Configurable<float> HudFadeDelay;
         public readonly Configurable<bool> AlwaysShowHud;
-        public readonly Configurable<bool> EnableEchoes;
         public readonly Configurable<string> StartRegion;
         public readonly Configurable<string> SelectedCampaign;
         public readonly Configurable<string> CameraModeConfig;
@@ -122,7 +121,6 @@ namespace RainWorldWallpaperMod
             StayDuration = config.Bind("stayDuration", 15f);
             HudFadeDelay = config.Bind("hudFadeDelay", 3f);
             AlwaysShowHud = config.Bind("alwaysShowHud", false);
-            EnableEchoes = config.Bind("enableEchoes", true);
             StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
             SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
             CameraModeConfig = config.Bind("cameraMode", CameraMode.RandomExploration.ToString());
@@ -179,13 +177,6 @@ namespace RainWorldWallpaperMod
                 alwaysShowHudBox.description = "If enabled, the HUD will always be visible and won't fade out";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Always HUD:"));
                 uiElements.Add(alwaysShowHudBox);
-                leftYPos -= lineHeight;
-
-                // Enable Echoes
-                OpCheckBox enableEchoesBox = new OpCheckBox(EnableEchoes, new Vector2(leftColumnControl, leftYPos));
-                enableEchoesBox.description = "If enabled, karma will be set to maximum to allow echoes (spiritual beings) to spawn";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Enable Echoes:"));
-                uiElements.Add(enableEchoesBox);
                 leftYPos -= lineHeight;
 
                 // Camera Mode label (dropdown added later)
