@@ -141,11 +141,12 @@ namespace RainWorldWallpaperMod
 
         public void Shutdown()
         {
-            watcherWorldState.ClearSessionState(Game);
-            uiController.Shutdown();
-            RegionManager?.Cleanup();
-            EchoMusic?.Shutdown();
-            ChaosManager?.Shutdown();
+            // Each step runs even if an earlier one fails, so the HUD never stays on Futile.stage after the session.
+            RunShutdownStep("Watcher state", () => watcherWorldState.ClearSessionState(Game));
+            RunShutdownStep("UI", uiController.Shutdown);
+            RunShutdownStep("region manager", () => RegionManager?.Cleanup());
+            RunShutdownStep("echo music", () => EchoMusic?.Shutdown());
+            RunShutdownStep("chaos", () => ChaosManager?.Shutdown());
             inputState.Reset();
             rainCycleController.Clear();
 
@@ -154,6 +155,18 @@ namespace RainWorldWallpaperMod
             sessionState.Reset();
 
             WallpaperMod.Log?.LogInfo("WallpaperController: Shutdown complete");
+        }
+
+        private static void RunShutdownStep(string name, Action step)
+        {
+            try
+            {
+                step();
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogError($"WallpaperController: {name} shutdown failed: {ex}");
+            }
         }
 
         private void HandleCriticalInput()

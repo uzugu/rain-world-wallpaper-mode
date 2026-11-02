@@ -156,6 +156,8 @@ namespace RainWorldWallpaperMod
                     $"RainWorldGame construction failed while wallpaper launch was {pendingWallpaperLaunch}. " +
                     $"Campaign='{ResolveCampaignString()}', region='{requestedStartRegion}', " +
                     $"startRoom='{requestedStartRoom}', activeMods=[{GetActiveModSummary()}].\n{ex}");
+                // A failed launch must not turn the next normal game into a wallpaper session.
+                pendingWallpaperLaunch = false;
                 throw;
             }
             finally
@@ -276,6 +278,11 @@ namespace RainWorldWallpaperMod
             try
             {
                 activeController?.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                // Always let the game shut its own process down, even if wallpaper cleanup fails.
+                Log?.LogError($"Wallpaper controller shutdown failed: {ex}");
             }
             finally
             {
