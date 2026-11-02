@@ -113,7 +113,7 @@ namespace RainWorldWallpaperMod
             };
         }
 
-        public void Update()
+        public void Update(float dt)
         {
             if (currentRegionLabel == null)
             {
@@ -132,7 +132,7 @@ namespace RainWorldWallpaperMod
             }
             else if (isVisible)
             {
-                idleTimer += Time.deltaTime;
+                idleTimer += dt;
 
                 if (idleTimer >= fadeDelay)
                 {
@@ -144,7 +144,7 @@ namespace RainWorldWallpaperMod
             if (!Mathf.Approximately(currentAlpha, targetAlpha))
             {
                 float fadeSpeed = 2f; // Fade over 0.5 seconds
-                currentAlpha = Mathf.MoveTowards(currentAlpha, targetAlpha, fadeSpeed * Time.deltaTime);
+                currentAlpha = Mathf.MoveTowards(currentAlpha, targetAlpha, fadeSpeed * dt);
                 UpdateAlpha();
             }
             else if (alwaysShowHUD && !Mathf.Approximately(currentAlpha, 1f))

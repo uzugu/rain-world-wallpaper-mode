@@ -111,7 +111,7 @@ namespace RainWorldWallpaperMod
             EchoMusic?.Update();
             SyncChaosRuntimeState();
             ChaosManager?.Update(dt);
-            uiController.Hud?.Update();
+            uiController.Hud?.Update(dt);
         }
 
         /// <summary>

@@ -177,7 +177,8 @@ namespace RainWorldWallpaperMod
 
             if (activeController != null && activeController.Game == self)
             {
-                activeController.Update(Time.deltaTime);
+                // Update runs once per game tick, not once per rendered frame, so each call is 1/framesPerSecond real seconds.
+                activeController.Update(1f / Math.Max(1, self.framesPerSecond));
             }
         }
 
