@@ -172,7 +172,6 @@ The overlay exposes the live wallpaper session:
 - `ARCHITECTURE.md`: file map and runtime architecture
 - `WALLPAPER_ENGINE.md`: external-app wallpaper setup and launch arguments
 - `WORKSHOP_PUBLISHING.md`: publishing checklist for Steam Workshop
-- `DESIGN.md`: historical design/planning document
 
 ## License
 

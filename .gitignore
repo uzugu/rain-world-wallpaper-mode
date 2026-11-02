@@ -22,3 +22,31 @@ NUL
 .DS_Store
 Thumbs.db
 *.txt
+
+## Private and local tooling (never commit)
+.ssh/
+.agents/
+.qwen/
+.beads/
+
+## Local media and design sources
+*.mp4
+*.psd
+cover LOGO.png
+
+## Local notes and AI-assistant docs (kept on disk, not published)
+CLAUDE.md
+agents.md
+commit-and-document.sh
+Cloudflared-Termux-SSH.md
+DESIGN.md
+exploration_report.md
+INSTALLATION_COMPLETE.md
+KNOWLEDGE_BASE.md
+MODDING_RESOURCES.md
+NEW_PLAN.md
+PROGRESS_V2.md
+RAIN_MEADOW_COMPARISON.md
+RAIN_WORLD_MODDING_GUIDE.md
+STATUS.md
+V2_STATUS.md
