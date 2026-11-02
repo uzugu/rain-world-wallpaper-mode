@@ -132,11 +132,6 @@ namespace RainWorldWallpaperMod
             }
 
             uiController.EnsureHudInitialized(camera, this);
-
-            if (sessionState.IsTransitioning && camera.followAbstractCreature == null)
-            {
-                // Camera position handled during transition update
-            }
         }
 
         public void Shutdown()

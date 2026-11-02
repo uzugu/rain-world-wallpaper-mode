@@ -37,8 +37,7 @@ namespace RainWorldWallpaperMod
 
             ParseCommandLineArguments();
 
-            // Don't initialize options here - wait for OnModsInit
-            // Options will be created by Remix when needed
+            // Options are created and registered with Remix in OnModsInit.
 
             On.RainWorld.OnModsInit += RainWorld_OnModsInit;
             On.ProcessManager.RequestMainProcessSwitch_ProcessID += ProcessManager_RequestMainProcessSwitch;
@@ -53,16 +52,6 @@ namespace RainWorldWallpaperMod
             On.PlayerProgression.SaveProgression += PlayerProgression_SaveProgression;
 
             MenuIntegration.Initialize();
-        }
-
-        // Remix integration - this method is called by the Remix framework
-        public static OptionInterface LoadOI()
-        {
-            if (Options == null)
-            {
-                Options = new WallpaperModOptions();
-            }
-            return Options;
         }
 
         public void BeginWallpaperMode(ProcessManager manager)
@@ -112,14 +101,12 @@ namespace RainWorldWallpaperMod
             // Initialize and register Remix options
             try
             {
-                // Create options if not already created by LoadOI
+                // OnModsInit can run more than once (for example after mods are re-applied), so create and register once.
                 if (Options == null)
                 {
                     Options = new WallpaperModOptions();
                 }
 
-                // Remix and some framework mods may discover LoadOI before OnModsInit.
-                // Avoid replacing an already-registered identical interface instance.
                 if (MachineConnector.GetRegisteredOI("uzugu_wallpapermod") != Options)
                 {
                     MachineConnector.SetRegisteredOI("uzugu_wallpapermod", Options);
@@ -258,7 +245,7 @@ namespace RainWorldWallpaperMod
             if (activeController != null)
             {
                 // Allow SlugNPCs / Pups to update so they can move and exist
-                if (self.isNPC || self.Template.type.ToString() == "SlugNPC")
+                if (self.isNPC)
                 {
                      orig(self, eu);
                      return;
