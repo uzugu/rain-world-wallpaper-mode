@@ -19,6 +19,7 @@ namespace RainWorldWallpaperMod
         private bool autoLaunchWallpaperRequested;
         private bool autoLaunchWallpaperConsumed;
         private WallpaperController activeController;
+        private bool constructingWallpaperGame;
         private string requestedStartRegion = "SU";
         private string requestedStartRoom = "SU_A01";
         private string commandLineStartRegion;
@@ -46,6 +47,8 @@ namespace RainWorldWallpaperMod
             On.Room.Loaded += Room_Loaded;
             On.Player.Update += Player_Update;
             On.Overseer.Update += Overseer_Update;
+            On.PlayerProgression.SaveDeathPersistentDataOfCurrentState += PlayerProgression_SaveDeathPersistentDataOfCurrentState;
+            On.PlayerProgression.SaveProgression += PlayerProgression_SaveProgression;
 
             MenuIntegration.Initialize();
         }
@@ -141,6 +144,8 @@ namespace RainWorldWallpaperMod
 
         private void RainWorldGame_ctor(On.RainWorldGame.orig_ctor orig, RainWorldGame self, ProcessManager manager)
         {
+            // The story session pre-saves inside this constructor, before activeController exists.
+            constructingWallpaperGame = pendingWallpaperLaunch;
             try
             {
                 orig(self, manager);
@@ -152,6 +157,10 @@ namespace RainWorldWallpaperMod
                     $"Campaign='{ResolveCampaignString()}', region='{requestedStartRegion}', " +
                     $"startRoom='{requestedStartRoom}', activeMods=[{GetActiveModSummary()}].\n{ex}");
                 throw;
+            }
+            finally
+            {
+                constructingWallpaperGame = false;
             }
 
             if (pendingWallpaperLaunch)
@@ -235,6 +244,32 @@ namespace RainWorldWallpaperMod
             orig(self, eu);
         }
 
+        private bool IsWallpaperSessionActive => constructingWallpaperGame || activeController != null;
+
+        // Wallpaper sessions start with RegionSelect, so the game builds a blank save state and pre-saves it
+        // "as a death" over the selected campaign's real save. Nothing in a wallpaper session should be saved.
+        private void PlayerProgression_SaveDeathPersistentDataOfCurrentState(On.PlayerProgression.orig_SaveDeathPersistentDataOfCurrentState orig, PlayerProgression self, bool saveAsIfPlayerDied, bool saveAsIfPlayerQuit)
+        {
+            if (IsWallpaperSessionActive)
+            {
+                Log?.LogInfo("Skipped death-persistent save during wallpaper mode to protect the campaign save");
+                return;
+            }
+
+            orig(self, saveAsIfPlayerDied, saveAsIfPlayerQuit);
+        }
+
+        private bool PlayerProgression_SaveProgression(On.PlayerProgression.orig_SaveProgression orig, PlayerProgression self, bool saveMaps, bool saveMiscProg)
+        {
+            if (IsWallpaperSessionActive)
+            {
+                Log?.LogInfo("Skipped progression save during wallpaper mode");
+                return false;
+            }
+
+            return orig(self, saveMaps, saveMiscProg);
+        }
+
         private void RainWorldGame_ShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
         {
             try
@@ -310,6 +345,8 @@ namespace RainWorldWallpaperMod
             On.Room.Loaded -= Room_Loaded;
             On.Player.Update -= Player_Update;
             On.Overseer.Update -= Overseer_Update;
+            On.PlayerProgression.SaveDeathPersistentDataOfCurrentState -= PlayerProgression_SaveDeathPersistentDataOfCurrentState;
+            On.PlayerProgression.SaveProgression -= PlayerProgression_SaveProgression;
 
             MenuIntegration.Cleanup();
             Log?.LogInfo("Rain World Wallpaper Mod unloaded");
