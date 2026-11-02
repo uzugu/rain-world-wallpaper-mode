@@ -175,13 +175,55 @@ namespace RainWorldWallpaperMod
 
         private void RainWorldGame_Update(On.RainWorldGame.orig_Update orig, RainWorldGame self)
         {
+            bool wasPaused = self.pauseMenu != null;
             orig(self);
 
             if (activeController != null && activeController.Game == self)
             {
+                // The pause button (Start on controllers, Escape on keyboard) also opens the wallpaper overlay or exits,
+                // so close the vanilla pause menu it just opened. A pause opened by the Steam overlay is left alone.
+                if (!wasPaused && self.pauseMenu != null && IsPauseButtonDown())
+                {
+                    self.ContinuePaused();
+                }
+
                 // Update runs once per game tick, not once per rendered frame, so each call is 1/framesPerSecond real seconds.
                 activeController.Update(1f / Math.Max(1, self.framesPerSecond));
             }
+        }
+
+        // RWInput is internal, so bind its pause check once; this keeps the fix on the player's own pause binding.
+        private static readonly Func<int, bool, bool> CheckPauseButton = CreatePauseButtonCheck();
+
+        private static Func<int, bool, bool> CreatePauseButtonCheck()
+        {
+            try
+            {
+                MethodInfo method = typeof(RainWorldGame).Assembly.GetType("RWInput")?.GetMethod(
+                    "CheckPauseButton",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                    null,
+                    new[] { typeof(int), typeof(bool) },
+                    null);
+                return method == null
+                    ? null
+                    : (Func<int, bool, bool>)Delegate.CreateDelegate(typeof(Func<int, bool, bool>), method);
+            }
+            catch (Exception ex)
+            {
+                Log?.LogWarning($"Could not bind RWInput.CheckPauseButton, falling back to Escape/Start: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static bool IsPauseButtonDown()
+        {
+            if (CheckPauseButton != null)
+            {
+                return CheckPauseButton(0, false);
+            }
+
+            return Input.GetKey(KeyCode.Escape) || Input.GetKey(KeyCode.JoystickButton7);
         }
 
         private void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self)
