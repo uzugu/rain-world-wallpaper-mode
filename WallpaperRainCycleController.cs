@@ -16,6 +16,7 @@ namespace RainWorldWallpaperMod
         private bool isRainCountdownActive;
         private float rainCountdownTimer;
         private float rainCountdownDuration = 120f;
+        private int statusLogTicks;
 
         public WallpaperRainCycleController(System.Random random)
         {
@@ -61,12 +62,10 @@ namespace RainWorldWallpaperMod
 
             WallpaperMod.Log?.LogInfo($"Rain tracking reset for new region (cycle: {timer}/{cycleLength}, progress: {cycleProgress:P0})");
 
-            if (cycleProgress >= CycleCompletionThreshold)
+            // With No Rain Wait on, leave the trigger unset so Update switches regions at the No Rain Wait threshold.
+            if (cycleProgress >= CycleCompletionThreshold && !IsNoRainWaitMode)
             {
-                rainCountdownDuration = GetRandomCountdownDuration();
-                rainCountdownTimer = 0f;
-                isRainCountdownActive = true;
-                hasTriggeredRainCountdown = true;
+                StartRainCountdown();
                 WallpaperMod.Log?.LogInfo($"Cycle already {cycleProgress:P0} complete! Starting countdown: {rainCountdownDuration:F1}s");
             }
         }
@@ -96,9 +95,11 @@ namespace RainWorldWallpaperMod
             float cycleProgress = (float)timer / cycleLength;
             bool noRainWait = IsNoRainWaitMode;
 
-            if (Time.frameCount % 300 == 0)
+            // Update runs once per game tick; log the cycle state about every 10 seconds at debug level.
+            if (++statusLogTicks >= 400)
             {
-                WallpaperMod.Log?.LogInfo($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CycleCompletionThreshold:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}, noRainWait={noRainWait}");
+                statusLogTicks = 0;
+                WallpaperMod.Log?.LogDebug($"Rain Cycle: timer={timer}/{cycleLength} ({cycleProgress:P1}), threshold={CycleCompletionThreshold:P0}, countdown_active={isRainCountdownActive}, triggered={hasTriggeredRainCountdown}, noRainWait={noRainWait}");
             }
 
             if (noRainWait)
@@ -115,14 +116,8 @@ namespace RainWorldWallpaperMod
 
             if (!hasTriggeredRainCountdown && cycleProgress >= CycleCompletionThreshold)
             {
-                float minCountdown = WallpaperMod.Options?.RainCountdownMin.Value ?? DefaultRainCountdownMin;
-                float maxCountdown = WallpaperMod.Options?.RainCountdownMax.Value ?? DefaultRainCountdownMax;
-                rainCountdownDuration = GetRandomCountdownDuration(minCountdown, maxCountdown);
-                rainCountdownTimer = 0f;
-                isRainCountdownActive = true;
-                hasTriggeredRainCountdown = true;
-
-                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s (range: {minCountdown}-{maxCountdown}s)");
+                StartRainCountdown();
+                WallpaperMod.Log?.LogInfo($"[Rain World Wallpaper Mode] Day ending ({cycleProgress:P1} complete)! Changing region in {rainCountdownDuration:F1}s");
             }
 
             if (isRainCountdownActive && !isRoomLocked)
@@ -140,9 +135,14 @@ namespace RainWorldWallpaperMod
             return false;
         }
 
-        private float GetRandomCountdownDuration()
+        private void StartRainCountdown()
         {
-            return GetRandomCountdownDuration(DefaultRainCountdownMin, DefaultRainCountdownMax);
+            float minCountdown = WallpaperMod.Options?.RainCountdownMin.Value ?? DefaultRainCountdownMin;
+            float maxCountdown = WallpaperMod.Options?.RainCountdownMax.Value ?? DefaultRainCountdownMax;
+            rainCountdownDuration = GetRandomCountdownDuration(minCountdown, maxCountdown);
+            rainCountdownTimer = 0f;
+            isRainCountdownActive = true;
+            hasTriggeredRainCountdown = true;
         }
 
         private float GetRandomCountdownDuration(float minCountdown, float maxCountdown)
