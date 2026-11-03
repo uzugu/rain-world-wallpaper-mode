@@ -145,7 +145,6 @@ The Remix UI exposes:
 - transition duration
 - HUD fade delay
 - always-show HUD
-- echo enable
 - chaos mode
 - chaos level
 - spawn all
