@@ -36,6 +36,7 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
 - `WallpaperHostMode.cs`
   - the game is launched by a wallpaper host (Wallpaper Engine, Lively) that embeds its window as the desktop wallpaper: detected from the parent process (`wallpaper32/64.exe`, `ui32.exe`, `lively.exe`, `livelywpf.exe`, through a Toolhelp process snapshot), or asked for with `--wallpaper-host` (alias `--wallpaper-engine`). The launcher is logged on every start
   - turns on `Application.runInBackground`, hides the BepInEx console window, and keeps the game windowed
+  - puts Rain World's Steam app ID (312520) back into the process environment first thing in `OnEnable`: a launcher that is a Steam app itself (Wallpaper Engine, 431960) passes its own `SteamAppId`/`SteamGameId` on, Steam reads that before `steam_appid.txt`, and the game would then sign in as that app and hang at "Downloading Workshop Content (0%)" waiting for the other app's Workshop items. Plugins load before the game's `SteamManager` starts Steam, which can only happen once per process
   - hooks `Options.OnLoadFinished`, where Rain World applies its saved resolution and fullscreen setting: once a host has embedded the game window (class `UnityWndClass`), the window is left alone and only Futile's render width is set; before that, the original runs forced windowed. The saved options are not changed
 
 - `WallpaperEngineSetup.cs`
