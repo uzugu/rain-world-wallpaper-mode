@@ -95,7 +95,7 @@ namespace RainWorldWallpaperMod
             hud?.SetSettingsMenuOpen(true);
         }
 
-        // The layouts are prototypes being compared; --wallpaper-menu-style picks one, the panel is the default.
+        // --wallpaper-menu-style minimal picks the minimalistic layout; the panel is the default.
         private global::Menu.Menu CreateSettingsMenu(ProcessManager manager, WallpaperController controller)
         {
             Action closeRequested = () => CloseSettingsMenu();
@@ -103,8 +103,6 @@ namespace RainWorldWallpaperMod
             {
                 case "minimal":
                     return new WallpaperMinimalMenu(manager, controller, closeRequested);
-                case "floating":
-                    return new WallpaperFloatingMenu(manager, controller, closeRequested);
                 default:
                     return new WallpaperSettingsMenu(manager, controller, closeRequested);
             }

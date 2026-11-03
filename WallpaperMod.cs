@@ -112,8 +112,7 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
-        /// Settings menu layout picked with --wallpaper-menu-style ("panel", "minimal" or "floating"); null means the panel.
-        /// The styles are prototypes being compared.
+        /// Settings menu layout picked with --wallpaper-menu-style ("panel" or "minimal"); null means the panel.
         /// </summary>
         internal string MenuStyle { get; private set; }
 
@@ -692,7 +691,7 @@ namespace RainWorldWallpaperMod
                         openSettingsOnLaunchRequested = true;
                         break;
 
-                    // Picks which prototype layout the settings menu uses; it does not start a session either.
+                    // Picks the settings menu layout; it does not start a session either.
                     case "--wallpaper-menu-style":
                         MenuStyle = (inlineValue ?? TryReadArgumentValue(args, ref i))?.Trim().ToLowerInvariant();
                         break;
