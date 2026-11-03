@@ -1,25 +1,20 @@
-using UnityEngine;
+using System;
 
 namespace RainWorldWallpaperMod
 {
     internal sealed class WallpaperUiController
     {
         private WallpaperHUD hud;
-        private WallpaperSettingsOverlay settingsOverlay;
+        private WallpaperSettingsMenu settingsMenu;
         private bool hasInitializedHud;
-        private bool hasInitializedSettingsOverlay;
-        private bool settingsMenuVisible;
 
         public WallpaperHUD Hud => hud;
 
-        public WallpaperSettingsOverlay SettingsOverlay => settingsOverlay;
-
-        public bool IsSettingsActive => settingsMenuVisible && settingsOverlay != null && settingsOverlay.IsVisible;
+        public bool IsSettingsActive => settingsMenu != null;
 
         public void EnsureInitialized(RoomCamera camera, WallpaperController controller)
         {
             EnsureHudInitialized(camera, controller);
-            EnsureSettingsOverlayInitialized(camera, controller);
         }
 
         public void EnsureHudInitialized(RoomCamera camera, WallpaperController controller)
@@ -41,37 +36,74 @@ namespace RainWorldWallpaperMod
             WallpaperMod.Log?.LogInfo("WallpaperController: HUD initialized successfully");
         }
 
-        public void EnsureSettingsOverlayInitialized(RoomCamera camera, WallpaperController controller)
+        public void ToggleSettingsMenu(WallpaperController controller)
         {
-            if (camera == null || hasInitializedSettingsOverlay)
+            if (settingsMenu != null)
             {
-                return;
+                CloseSettingsMenu();
             }
-
-            settingsOverlay = new WallpaperSettingsOverlay(camera, controller);
-            hasInitializedSettingsOverlay = true;
-            WallpaperMod.Log?.LogInfo("WallpaperController: Settings overlay initialized successfully");
+            else
+            {
+                OpenSettingsMenu(controller);
+            }
         }
 
-        public void ToggleSettingsMenu(RoomCamera camera, WallpaperController controller)
+        /// <summary>
+        /// Opens the settings menu as a side process of the game, which keeps running underneath it.
+        /// </summary>
+        private void OpenSettingsMenu(WallpaperController controller)
         {
-            if (!hasInitializedSettingsOverlay)
-            {
-                EnsureSettingsOverlayInitialized(camera, controller);
-            }
+            ProcessManager manager = controller?.Game?.manager;
 
-            if (settingsOverlay == null)
+            // A pending process switch freezes menu input and closes the menu again, so do not open it then.
+            if (settingsMenu != null || manager == null || manager.upcomingProcess != null)
             {
                 return;
             }
 
-            settingsMenuVisible = !settingsMenuVisible;
-            settingsOverlay.SetVisible(settingsMenuVisible);
-            settingsOverlay.Refresh();
-
-            if (settingsMenuVisible)
+            WallpaperSettingsMenu menu;
+            try
             {
-                hud?.RegisterUserActivity();
+                menu = new WallpaperSettingsMenu(manager, controller, () => CloseSettingsMenu());
+                manager.sideProcesses.Add(menu);
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogError($"WallpaperController: Failed to open the settings menu: {ex}");
+                return;
+            }
+
+            settingsMenu = menu;
+            menu.PlaySound(SoundID.MENU_Switch_Page_In);
+            hud?.RegisterUserActivity();
+        }
+
+        /// <summary>
+        /// Stops the settings menu. Side processes outlive the game they were started from, so every path that ends or
+        /// reloads the wallpaper session has to come through here.
+        /// </summary>
+        public void CloseSettingsMenu(bool playSound = true)
+        {
+            WallpaperSettingsMenu menu = settingsMenu;
+            if (menu == null)
+            {
+                return;
+            }
+
+            settingsMenu = null;
+
+            try
+            {
+                if (playSound)
+                {
+                    menu.PlaySound(SoundID.MENU_Switch_Page_Out);
+                }
+
+                menu.manager.StopSideProcess(menu);
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogError($"WallpaperController: Failed to close the settings menu: {ex}");
             }
         }
 
@@ -80,21 +112,13 @@ namespace RainWorldWallpaperMod
             hud?.RegisterUserActivity();
         }
 
-        public void RefreshOverlay()
-        {
-            settingsOverlay?.Refresh();
-        }
-
         public void ResetForReload()
         {
+            CloseSettingsMenu(playSound: false);
+
             hud?.Destroy();
             hud = null;
             hasInitializedHud = false;
-
-            settingsOverlay?.Destroy();
-            settingsOverlay = null;
-            hasInitializedSettingsOverlay = false;
-            settingsMenuVisible = false;
         }
 
         public void Shutdown()

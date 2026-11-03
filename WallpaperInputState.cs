@@ -6,7 +6,6 @@ namespace RainWorldWallpaperMod
     {
         Pause,
         ToggleOverlay,
-        Cancel,
         NextRoom,
         RegionForward,
         RegionBack,
@@ -15,7 +14,6 @@ namespace RainWorldWallpaperMod
         Down,
         Left,
         Right,
-        Enter,
         Lock
     }
 

@@ -99,7 +99,7 @@ namespace RainWorldWallpaperMod
         }
 
         // Allowed ranges for the numeric settings (seconds unless noted). Remix enforces them through the
-        // configurables' acceptable ranges, and WallpaperSettingsOverlay reuses them for its runtime changes
+        // configurables' acceptable ranges, and WallpaperSettingsMenu reuses them for its runtime changes
         // so the two cannot drift apart.
         public const float TransitionDurationRangeMin = 1f;
         public const float TransitionDurationRangeMax = 15f;
