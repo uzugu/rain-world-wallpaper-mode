@@ -263,7 +263,7 @@ namespace RainWorldWallpaperMod
 
         private string GetRegionName(string regionCode)
         {
-            return WallpaperRegionCatalog.GetDisplayName(regionCode, WallpaperMod.Options?.SelectedCampaign.Value);
+            return WallpaperRegionCatalog.GetDisplayName(regionCode, WallpaperMod.CurrentCampaign);
         }
 
         private string FormatTime(float seconds)

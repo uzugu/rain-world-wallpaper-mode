@@ -360,7 +360,7 @@ namespace RainWorldWallpaperMod
                 "Watcher"                            // The Watcher
             };
 
-            string currentCampaign = Options.SelectedCampaign.Value;
+            string currentCampaign = CurrentCampaign;
             int currentIndex = allCampaigns.IndexOf(currentCampaign);
 
             if (currentIndex < 0)
@@ -374,8 +374,9 @@ namespace RainWorldWallpaperMod
 
             Log?.LogInfo($"AdvanceToNextCampaign: {currentCampaign} -> {nextCampaign}");
 
-            // Update config
+            // Update config, and end any command-line override before OnCampaignChange rebuilds the region list from it
             Options.SelectedCampaign.Value = nextCampaign;
+            ClearCampaignOverride();
 
             string startRegion = WallpaperRegionCatalog.GetDefaultStartRegionForCampaign(nextCampaign);
 
@@ -514,6 +515,27 @@ namespace RainWorldWallpaperMod
             }
             Log?.LogInfo($"ResolveInitialRegion: No options, defaulting to '{requestedStartRegion ?? "SU"}'");
             return WallpaperRegionCatalog.NormalizeRegionForCampaign(requestedStartRegion ?? "SU", campaign);
+        }
+
+        /// <summary>
+        /// The campaign of the running wallpaper session: the --wallpaper-campaign override when one was given, otherwise
+        /// the Remix setting. Session code reads this instead of Options.SelectedCampaign, which the override never changes.
+        /// </summary>
+        internal static string CurrentCampaign => Instance != null
+            ? Instance.ResolveCampaignString()
+            : Options?.SelectedCampaign.Value ?? WallpaperModOptions.CampaignChoice.White.ToString();
+
+        /// <summary>
+        /// Ends the --wallpaper-campaign override. Called when the campaign changes during a session (overlay quick travel,
+        /// campaign advancement), after the new campaign was written to Options.SelectedCampaign, so that it takes effect.
+        /// </summary>
+        internal void ClearCampaignOverride()
+        {
+            if (commandLineCampaign != null)
+            {
+                Log?.LogInfo($"Campaign changed during the session; the '{commandLineCampaign}' command-line campaign no longer applies");
+                commandLineCampaign = null;
+            }
         }
 
         private string ResolveCampaignString()

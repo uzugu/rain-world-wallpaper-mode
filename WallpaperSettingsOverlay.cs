@@ -311,7 +311,7 @@ namespace RainWorldWallpaperMod
             // Try to match current campaign
             if (WallpaperMod.Options != null)
             {
-                string currentCampaign = WallpaperMod.Options.SelectedCampaign.Value;
+                string currentCampaign = WallpaperMod.CurrentCampaign;
                 int index = availableCampaigns.FindIndex(c => c == currentCampaign);
                 if (index >= 0)
                 {
@@ -385,7 +385,7 @@ namespace RainWorldWallpaperMod
         {
             string selectedCampaign = availableCampaigns != null && availableCampaigns.Count > 0
                 ? availableCampaigns[selectedCampaignIndex]
-                : WallpaperMod.Options?.SelectedCampaign.Value;
+                : WallpaperMod.CurrentCampaign;
 
             availableRegions = WallpaperRegionCatalog.GetRegionsForCampaign(selectedCampaign).ToList();
             selectedRegionIndex = 0;
@@ -561,7 +561,7 @@ namespace RainWorldWallpaperMod
             string selectedRoom = availableRooms[selectedRoomIndex];
 
             bool regionChanging = !IsSelectedRegionCurrent();
-            string currentCampaign = WallpaperMod.Options?.SelectedCampaign.Value;
+            string currentCampaign = WallpaperMod.CurrentCampaign;
             bool campaignChanging = !string.Equals(currentCampaign, selectedCampaign, StringComparison.OrdinalIgnoreCase);
 
             WallpaperMod.Log?.LogInfo($"Quick Travel: Campaign={selectedCampaign}, Region={selectedRegion}, CameraMode={selectedCameraMode}, RotState={selectedRotState}, Room={selectedRoom}");
@@ -579,6 +579,8 @@ namespace RainWorldWallpaperMod
             controller?.SetCameraMode(WallpaperModOptions.GetCameraMode(selectedCameraMode));
             if (campaignChanging)
             {
+                // The selected campaign was just written to the config; end any command-line override so it applies
+                WallpaperMod.Instance?.ClearCampaignOverride();
                 controller?.RegionMgr?.OnCampaignChange(selectedRegion);
                 regionChanging = true;
             }
@@ -626,7 +628,7 @@ namespace RainWorldWallpaperMod
         {
             string selectedCampaign = availableCampaigns != null && availableCampaigns.Count > 0
                 ? availableCampaigns[selectedCampaignIndex]
-                : WallpaperMod.Options?.SelectedCampaign.Value;
+                : WallpaperMod.CurrentCampaign;
 
             return WallpaperRegionCatalog.GetDisplayName(enumName, selectedCampaign);
         }

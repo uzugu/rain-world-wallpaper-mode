@@ -31,7 +31,7 @@ namespace RainWorldWallpaperMod
 
         private void InitializeRegions()
         {
-            string campaign = WallpaperMod.Options?.SelectedCampaign.Value;
+            string campaign = WallpaperMod.CurrentCampaign;
             var distinctRegions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var region in WallpaperRegionCatalog.GetRegionsForCampaign(campaign))
             {

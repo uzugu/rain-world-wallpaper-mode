@@ -28,12 +28,13 @@ Optional overrides:
 Supported values:
 
 - `--wallpaper-region`: Rain World region codes such as `SU`, `HI`, `CC`, `GW`, `SH`, `DS`, `SL`, `SI`, `LF`, `UW`, `SS`, `SB`, `LM`, `RM`, `DM`, `LC`, `MS`, `VS`, `CL`, `OE`
-- `--wallpaper-campaign`: `White`, `Yellow`, `Red`, `Gourmand`, `Artificer`, `Rivulet`, `Spearmaster`, `Saint`
+- `--wallpaper-campaign`: `White`, `Yellow`, `Red`, `Gourmand`, `Artificer`, `Rivulet`, `Spearmaster`, `Saint`, `Watcher`
 
 Behavior:
 
 - `--wallpaper` auto-starts wallpaper mode from the main menu without a click.
-- Region and campaign overrides apply to that process only.
+- Region and campaign overrides apply to that process only and do not change your Remix settings.
+- The campaign override covers the whole session (region tour, HUD names, Watcher world states) until you pick another campaign in the overlay or the tour advances to the next campaign.
 - Auto-launch is one-shot per process, so using `Escape` to return to the menu will not immediately restart wallpaper mode.
 
 ## Recommended Wallpaper Engine Configuration

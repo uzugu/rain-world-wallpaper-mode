@@ -41,7 +41,7 @@ Notes:
 
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
-- `--wallpaper-campaign <name>` overrides the campaign for that launch only.
+- `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the overlay or the tour moves on to the next campaign.
 - The auto-launch is one-shot per process, so returning to the main menu does not immediately relaunch wallpaper mode.
 
 For setup details, see `WALLPAPER_ENGINE.md`.

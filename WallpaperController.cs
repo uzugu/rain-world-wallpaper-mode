@@ -70,7 +70,7 @@ namespace RainWorldWallpaperMod
                 }
             }
 
-            WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (start region: {currentRegionCode}, camera mode: {WallpaperModOptions.GetCameraMode(WallpaperMod.Options?.CameraModeConfig.Value ?? WallpaperModOptions.CameraMode.RandomExploration.ToString())})");
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (campaign: {WallpaperMod.CurrentCampaign}, start region: {currentRegionCode}, camera mode: {WallpaperModOptions.GetCameraMode(WallpaperMod.Options?.CameraModeConfig.Value ?? WallpaperModOptions.CameraMode.RandomExploration.ToString())})");
         }
 
         /// <summary>
@@ -936,7 +936,7 @@ namespace RainWorldWallpaperMod
 
         private bool IsWatcherCampaign()
         {
-            return string.Equals(WallpaperMod.Options?.SelectedCampaign.Value, "Watcher", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(WallpaperMod.CurrentCampaign, "Watcher", StringComparison.OrdinalIgnoreCase);
         }
     }
 }
