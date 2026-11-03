@@ -27,6 +27,8 @@ namespace RainWorldWallpaperMod
         private string commandLineStartRegion;
         private string commandLineCampaign;
         private WallpaperModOptions.MenuStyle? commandLineMenuStyle;
+        private bool hostModeRequested;
+        private bool muteRequested;
         private bool openSettingsOnLaunchRequested;
         private bool openSettingsOnLaunchConsumed;
 
@@ -39,6 +41,7 @@ namespace RainWorldWallpaperMod
             Log?.LogInfo("Rain World Wallpaper Mod V2.0 loaded!");
 
             ParseCommandLineArguments();
+            ApplyLaunchEnvironment();
 
             // Options are created and registered with Remix in OnModsInit.
 
@@ -466,6 +469,7 @@ namespace RainWorldWallpaperMod
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState -= PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression -= PlayerProgression_SaveProgression;
 
+            WallpaperHostMode.Deactivate();
             MenuIntegration.Cleanup();
             Log?.LogInfo("Rain World Wallpaper Mod unloaded");
             Log = null;
@@ -632,6 +636,23 @@ namespace RainWorldWallpaperMod
             return SlugcatStats.Name.White;
         }
 
+        // What the command line asks of the whole process rather than of one wallpaper session: host mode and muting.
+        private void ApplyLaunchEnvironment()
+        {
+            if (hostModeRequested)
+            {
+                WallpaperHostMode.Activate();
+            }
+
+            if (muteRequested)
+            {
+                // Futile's master volume (AudioListener.volume). The game never sets it and it is not saved, so the
+                // mute lasts exactly as long as this process. FSoundManager.isMuted is not used: it also pauses audio.
+                FSoundManager.volume = 0f;
+                Log?.LogInfo("Game audio muted for this run (--wallpaper-mute)");
+            }
+        }
+
         private void ParseCommandLineArguments()
         {
             string[] args;
@@ -671,10 +692,22 @@ namespace RainWorldWallpaperMod
                     case "-wallpapermode":
                     case "--wallpapermode":
                     case "--wallpaper-mode":
+                        autoLaunchWallpaperRequested = true;
+                        break;
+
+                    // Launched by a wallpaper host (Wallpaper Engine, Lively) that embeds the game's window as the desktop
+                    // wallpaper. It starts wallpaper mode too; see WallpaperHostMode for what else it changes.
+                    case "--wallpaper-host":
                     case "-wallpaperengine":
                     case "--wallpaperengine":
                     case "--wallpaper-engine":
+                        hostModeRequested = true;
                         autoLaunchWallpaperRequested = true;
+                        break;
+
+                    // Silences the game for this run; it does not start a session by itself.
+                    case "--wallpaper-mute":
+                        muteRequested = true;
                         break;
 
                     case "--wallpaper-region":
