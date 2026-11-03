@@ -227,16 +227,32 @@ namespace RainWorldWallpaperMod
 
         private void Room_Loaded(On.Room.orig_Loaded orig, Room self)
         {
-            if (activeController != null && activeController.Game == self?.game)
+            // The game calls Loaded at the end of LoadFromDataString, inside the RoomPreparer constructor, so an
+            // exception escaping this hook would leave the room half-prepared. Wallpaper room effects are optional.
+            try
             {
-                activeController.BeforeRoomLoaded(self);
+                if (activeController != null && activeController.Game == self?.game)
+                {
+                    activeController.BeforeRoomLoaded(self);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log?.LogError($"Wallpaper effects before loading room {self?.abstractRoom?.name} failed: {ex}");
             }
 
             orig(self);
 
-            if (activeController != null && activeController.Game == self?.game)
+            try
             {
-                activeController.AfterRoomLoaded(self);
+                if (activeController != null && activeController.Game == self?.game)
+                {
+                    activeController.AfterRoomLoaded(self);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log?.LogError($"Wallpaper effects after loading room {self?.abstractRoom?.name} failed: {ex}");
             }
         }
 

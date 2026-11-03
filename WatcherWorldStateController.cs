@@ -172,12 +172,23 @@ namespace RainWorldWallpaperMod
 
         private bool CanUseWatcherState(RainWorldGame game, Room room, WallpaperModOptions.RotState state)
         {
-            bool available = ModCompatibility.IsWatcherEnabled &&
-                WatcherReflection.RoomEffectType != null &&
-                game != null &&
-                room != null &&
-                room.game == game &&
-                room.roomSettings != null;
+            bool available;
+            try
+            {
+                available = ModCompatibility.IsWatcherEnabled &&
+                    WatcherReflection.RoomEffectType != null &&
+                    game != null &&
+                    room != null &&
+                    room.game == game &&
+                    room.roomSettings != null;
+            }
+            catch (Exception ex)
+            {
+                // These checks scan assemblies by reflection and run before TryWatcherAction, from Update every
+                // tick and from the Room.Loaded hook. A failure means Watcher effects are unavailable, not a crash.
+                LogFailureOnce(ex);
+                available = false;
+            }
 
             if (!available && state != WallpaperModOptions.RotState.Natural && !warnedUnavailable)
             {
