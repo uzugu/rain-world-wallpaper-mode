@@ -45,7 +45,7 @@ Install the packaged `mod` folder into Rain World locally and verify:
 - the mod appears in Remix
 - the `WALLPAPER MODE` button appears on the main menu
 - wallpaper mode launches
-- HUD and overlay work
+- HUD and settings menu work
 - at least one region reload succeeds
 
 ## First Upload Flow

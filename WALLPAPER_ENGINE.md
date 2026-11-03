@@ -34,7 +34,7 @@ Behavior:
 
 - `--wallpaper` auto-starts wallpaper mode from the main menu without a click.
 - Region and campaign overrides apply to that process only and do not change your Remix settings.
-- The campaign override covers the whole session (region tour, HUD names, Watcher world states) until you pick another campaign in the overlay or the tour advances to the next campaign.
+- The campaign override covers the whole session (region tour, HUD names, Watcher world states) until you pick another campaign in the settings menu or the tour advances to the next campaign.
 - Auto-launch is one-shot per process, so using `Escape` to return to the menu will not immediately restart wallpaper mode.
 
 ## Recommended Wallpaper Engine Configuration
@@ -44,7 +44,7 @@ Use the application wallpaper approach, then tune Wallpaper Engine around Rain W
 - launch Rain World borderless or windowed if needed
 - mute or lower audio if the wallpaper should stay silent
 - pause or stop when fullscreen applications are active
-- keep this mod's HUD fade enabled unless you want persistent overlay text
+- keep this mod's HUD fade enabled unless you want persistent HUD text
 
 ## Limits
 

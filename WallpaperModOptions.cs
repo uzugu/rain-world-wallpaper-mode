@@ -275,7 +275,7 @@ namespace RainWorldWallpaperMod
                 float bottomYPos = Mathf.Min(leftYPos, rightYPos) - lineHeight * 0.5f;
 
                 // Control hints
-                uiElements.Add(new OpLabel(leftColumnLabel, bottomYPos, "In-game controls: F1/Tab opens the live overlay.", bigText: false)
+                uiElements.Add(new OpLabel(leftColumnLabel, bottomYPos, "In-game controls: F1/Tab opens the settings menu.", bigText: false)
                 {
                     color = new Color(0.7f, 0.85f, 1f, 0.85f)
                 });

@@ -53,9 +53,13 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - starts the command-line auto-launch from the main menu's first update
 
 - `WallpaperHUD.cs`
-  - Futile-based HUD added directly to `Futile.stage`
-  - shows region, room, next room, next region, and rain-cycle state
-  - supports fade-after-idle or always-visible behavior
+  - draws into the camera's `HUD2` layer (`RoomCamera.ReturnFContainer`), above the room and below menus
+  - uses the game's fonts, menu colours and FlatLight shadows: location at the bottom left, rain state and region progress at the bottom right, controls hint at the bottom centre
+  - announces a new region, and a new sub-region once the camera has settled in it, the way the game's `SubregionTracker` does
+  - fades out after the idle delay unless it is set to always visible
+
+- `WallpaperHudParts.cs`
+  - the HUD's text lines, independently fading blocks and text helpers
 
 - `WallpaperSettingsMenu.cs`
   - in-game settings and quick-travel panel, a `Menu.Menu` built from the game's own menu objects (labels, page-arrow buttons, checkboxes, buttons and a rounded rect)
@@ -142,9 +146,9 @@ The mod continuously removes or suppresses player-controlled slugcats while allo
 
 The original fixed region dwell concept has been replaced in practice by rain-cycle-driven transitions. Documentation and future work should treat the rain cycle as the authoritative region-change trigger unless the implementation changes again.
 
-### Futile-First UI
+### HUD In The Camera's HUD Layer
 
-The HUD renders directly through Futile rather than the room HUD stack. This keeps it stable across camera changes and world transitions.
+The camera only builds a vanilla `HUD.HUD` when it follows a player, and vanilla code dereferences `hud.textPrompt` and `hud.map` whenever one exists, so the wallpaper never creates one. Its HUD draws straight into the camera's `HUD2` layer instead: screen space, above the room, below menus, and kept across room changes until the game shuts down.
 
 ### The Settings Menu Is A Side Process
 
