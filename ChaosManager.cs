@@ -571,7 +571,8 @@ namespace RainWorldWallpaperMod
                     return;
                 }
 
-                var entityID = new EntityID(-1, UnityEngine.Random.Range(0, 100000));
+                // Issued by the game so it cannot collide with another entity (EntityID equality compares the number only)
+                var entityID = game.GetNewID();
                 var creatureTemplate = StaticWorld.GetCreatureTemplate(creatureType);
                 if (creatureTemplate == null)
                 {
