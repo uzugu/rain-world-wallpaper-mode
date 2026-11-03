@@ -125,7 +125,7 @@ namespace RainWorldWallpaperMod
         private static bool IsPlayerControlledSlugcat(AbstractCreature creature)
         {
             return creature?.creatureTemplate?.type != null &&
-                creature.creatureTemplate.type.ToString() == "Slugcat";
+                creature.creatureTemplate.type == CreatureTemplate.Type.Slugcat;
         }
 
         private void RemoveActiveOverseers(RainWorldGame game)
@@ -145,7 +145,7 @@ namespace RainWorldWallpaperMod
                 var overseersToRemove = new List<AbstractCreature>();
                 foreach (var creature in room.creatures)
                 {
-                    if (creature?.creatureTemplate?.type?.ToString() == "Overseer")
+                    if (creature?.creatureTemplate?.type == CreatureTemplate.Type.Overseer)
                     {
                         overseersToRemove.Add(creature);
                     }
@@ -159,7 +159,11 @@ namespace RainWorldWallpaperMod
                         overseer.realizedCreature.Destroy();
                     }
 
-                    room.creatures.Remove(overseer);
+                    // RemoveEntity also clears entities, entitiesInDens and creatures. An overseer left
+                    // in entities is abstractized on room unload, which clears its realized link, so
+                    // it can be realized again when it changes rooms.
+                    room.RemoveEntity(overseer);
+                    overseer.Destroy();
                 }
             }
         }
