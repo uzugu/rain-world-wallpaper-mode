@@ -750,20 +750,88 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
-        /// Remove all spawned creatures
+        /// Remove all spawned creatures from the world
         /// </summary>
         private void CleanupAllCreatures()
         {
+            // Resolved once: the SlugNPCs HandleSlugNPC added to game.Players must not outlive their creatures
+            List<AbstractCreature> players = game?.session != null ? game.Players : null;
+
             foreach (var creature in spawnedCreatures)
             {
-                if (creature?.realizedCreature != null)
+                if (creature == null)
                 {
-                    creature.realizedCreature.Destroy();
+                    continue;
+                }
+
+                try
+                {
+                    RemoveSpawnedCreature(creature, players);
+                }
+                catch (System.Exception ex)
+                {
+                    WallpaperMod.Log?.LogWarning($"ChaosManager: Failed to remove {creature.creatureTemplate?.type}: {ex.Message}");
                 }
             }
 
             spawnedCreatures.Clear();
             WallpaperMod.Log?.LogInfo("ChaosManager: Cleaned up all spawned creatures");
+        }
+
+        /// <summary>
+        /// Fully remove one spawned creature. Destroying only the realized creature is not enough: the AbstractCreature
+        /// is only unregistered from its AbstractRoom if that room updates the destroyed object before it unloads (never
+        /// for a creature in transit), a creature that is still abstract is never touched at all, and anything left
+        /// registered is realized again when its room loads.
+        /// </summary>
+        private void RemoveSpawnedCreature(AbstractCreature creature, List<AbstractCreature> players)
+        {
+            Creature realized = creature.realizedCreature;
+            if (realized != null)
+            {
+                // Release grasps in both directions so no Grasp is left pointing at a deleted creature.
+                // Best effort: a failure here must not stop the removal below
+                try
+                {
+                    realized.LoseAllGrasps();
+                    realized.AllGraspsLetGoOfThisObject(true);
+                }
+                catch (System.Exception ex)
+                {
+                    WallpaperMod.Log?.LogWarning($"ChaosManager: Could not release grasps of {creature.creatureTemplate?.type}: {ex.Message}");
+                }
+
+                RemoveFromShortcutVessels(realized);
+
+                realized.Destroy();
+                realized.RemoveFromRoom();
+            }
+
+            // AbstractPhysicalObject.Destroy only flags the entity and unhooks its sticks, so unregister it from its room
+            // as well. This comes after RemoveFromRoom, otherwise AbstractRoom.RemoveEntity warns that the realized creature remains
+            creature.Destroy();
+            creature.Room?.RemoveEntity(creature);
+
+            // Only SlugNPCs were ever added here (HandleSlugNPC), Remove does nothing for any other creature
+            players?.Remove(creature);
+        }
+
+        /// <summary>
+        /// Drop any shortcut or flight vessel still carrying the creature. A creature in transit is in no room's update
+        /// list, so the room never notices it was deleted, and the vessel would later hand it to a room or den
+        /// (AbstractCreature.Move / MoveEntityToDen), registering the abstract creature again.
+        /// </summary>
+        private void RemoveFromShortcutVessels(Creature creature)
+        {
+            ShortcutHandler shortcuts = game?.shortcuts;
+            if (shortcuts == null)
+            {
+                return;
+            }
+
+            shortcuts.transportVessels?.RemoveAll(vessel => vessel.creature == creature);
+            shortcuts.betweenRoomsWaitingLobby?.RemoveAll(vessel => vessel.creature == creature);
+            shortcuts.borderTravelVessels?.RemoveAll(vessel => vessel.creature == creature);
         }
 
         /// <summary>
