@@ -183,7 +183,19 @@ namespace RainWorldWallpaperMod
                 float rightColumn = PageMargin + CardWidth + ColumnGap;
 
                 page.AddCenteredText("WALLPAPER MODE", 560f, 30f, bigText: true, RemixPage.White);
-                page.AddCenteredText("Hover over a setting to see what it does.", 532f, 20f, bigText: false, RemixPage.DarkGrey);
+                OpLabel hint = page.AddCenteredText("Hover over a setting to see what it does.", 532f, 20f, bigText: false, RemixPage.DarkGrey);
+
+                // Top right, clear of the centred title: one click adds this wallpaper to Wallpaper Engine's library. The
+                // hint line under the title reports how it went.
+                page.AddButton("WALLPAPER ENGINE", new Vector2(CanvasSize - PageMargin - 150f, 558f), new Vector2(150f, 26f),
+                    "Add \"Rain World Wallpaper Mode\" to Wallpaper Engine, so you can pick it there as your desktop wallpaper. " +
+                    "Wallpaper Engine then starts the game with these settings. Restart Wallpaper Engine if it does not show up.",
+                    () =>
+                    {
+                        bool added = WallpaperEngineSetup.TryAddProject(out string message);
+                        hint.text = message.Length > 88 ? message.Substring(0, 85) + "..." : message;
+                        hint.color = added ? RemixPage.White : RemixPage.ErrorRed;
+                    });
 
                 // The cards follow the sections of the in-game settings menu; TIMING holds the durations that only Remix
                 // sets, and Skip the rain sits with the travel choices because it decides when the tour moves on. Both
@@ -316,6 +328,7 @@ namespace RainWorldWallpaperMod
             public static Color White => global::Menu.MenuColorEffect.rgbWhite;
             public static Color MediumGrey => global::Menu.MenuColorEffect.rgbMediumGrey;
             public static Color DarkGrey => global::Menu.MenuColorEffect.rgbDarkGrey;
+            public static Color ErrorRed => new Color(0.95f, 0.45f, 0.4f);
 
             /// <summary>
             /// Height of a card that holds the given number of setting rows.
@@ -325,12 +338,24 @@ namespace RainWorldWallpaperMod
                 return CardHeaderHeight + rows * RowPitch + CardBottomPadding;
             }
 
-            public void AddCenteredText(string text, float bottom, float height, bool bigText, Color color)
+            public OpLabel AddCenteredText(string text, float bottom, float height, bool bigText, Color color)
             {
-                items.Add(new OpLabel(new Vector2(PageMargin, bottom), new Vector2(CanvasSize - 2f * PageMargin, height), text, FLabelAlignment.Center, bigText)
+                var label = new OpLabel(new Vector2(PageMargin, bottom), new Vector2(CanvasSize - 2f * PageMargin, height), text, FLabelAlignment.Center, bigText)
                 {
                     color = color
-                });
+                };
+                items.Add(label);
+                return label;
+            }
+
+            public void AddButton(string text, Vector2 pos, Vector2 size, string description, Action onClick)
+            {
+                var button = new OpSimpleButton(pos, size, text)
+                {
+                    description = description
+                };
+                button.OnClick += _ => onClick();
+                items.Add(button);
             }
 
             /// <summary>

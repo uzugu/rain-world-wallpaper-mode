@@ -635,9 +635,21 @@ namespace RainWorldWallpaperMod
             return SlugcatStats.Name.White;
         }
 
-        // What the command line asks of the whole process rather than of one wallpaper session.
+        // What the launch asks of the whole process rather than of one wallpaper session. A wallpaper host that starts
+        // the game counts like --wallpaper-host, so Wallpaper Engine and Lively need no launch arguments.
         private void ApplyLaunchEnvironment()
         {
+            if (!hostModeRequested)
+            {
+                string host = WallpaperHostMode.DetectLaunchingHost();
+                if (host != null)
+                {
+                    hostModeRequested = true;
+                    autoLaunchWallpaperRequested = true;
+                    Log?.LogInfo($"Started by the wallpaper host {host}; running as a desktop wallpaper");
+                }
+            }
+
             if (hostModeRequested)
             {
                 WallpaperHostMode.Activate();

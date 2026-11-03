@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
@@ -17,8 +19,79 @@ namespace RainWorldWallpaperMod
         private const string UnityWindowClass = "UnityWndClass";
         private const int SW_HIDE = 0;
         private const uint GA_PARENT = 1;
+        private const uint TH32CS_SNAPPROCESS = 0x00000002;
+        private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+
+        // Programs that run application wallpapers: Wallpaper Engine (wallpaper32/64.exe, and ui32.exe for its editor
+        // preview) and Lively Wallpaper. When one of them starts the game, host mode turns on without launch arguments.
+        private static readonly string[] HostProcessNames =
+        {
+            "wallpaper64.exe", "wallpaper32.exe", "ui32.exe", "lively.exe", "livelywpf.exe"
+        };
 
         internal static bool Active { get; private set; }
+
+        /// <summary>
+        /// Returns the executable name of the process that started the game when it is a known wallpaper host, and null
+        /// otherwise. Every launcher is logged, so a host that is not on the list shows up in the log.
+        /// </summary>
+        internal static string DetectLaunchingHost()
+        {
+            try
+            {
+                string launcher = GetParentProcessName();
+                WallpaperMod.Log?.LogInfo($"Game started by {launcher ?? "an unknown process"}");
+                if (launcher != null && HostProcessNames.Any(name => string.Equals(name, launcher, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return launcher;
+                }
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogWarning($"Could not tell which program started the game: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        // The parent of this process, from a snapshot of all processes. The parent may have exited since; then its
+        // process ID is not in the snapshot (or belongs to another program), which at worst means no host is detected.
+        private static string GetParentProcessName()
+        {
+            IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == InvalidHandleValue || snapshot == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            try
+            {
+                var processes = new Dictionary<uint, (uint parent, string exe)>();
+                var entry = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32)) };
+                if (!Process32First(snapshot, ref entry))
+                {
+                    return null;
+                }
+
+                do
+                {
+                    processes[entry.th32ProcessID] = (entry.th32ParentProcessID, entry.szExeFile);
+                }
+                while (Process32Next(snapshot, ref entry));
+
+                uint self = (uint)Process.GetCurrentProcess().Id;
+                if (processes.TryGetValue(self, out var current) && processes.TryGetValue(current.parent, out var parent))
+                {
+                    return parent.exe;
+                }
+
+                return null;
+            }
+            finally
+            {
+                CloseHandle(snapshot);
+            }
+        }
 
         /// <summary>
         /// Switches host mode on for this process. Called once from the plugin's OnEnable, after the command line is read.
@@ -191,6 +264,38 @@ namespace RainWorldWallpaperMod
         }
 
         private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct PROCESSENTRY32
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szExeFile;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+        [DllImport("kernel32.dll", EntryPoint = "Process32FirstW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool Process32First(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+        [DllImport("kernel32.dll", EntryPoint = "Process32NextW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool Process32Next(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+        [DllImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr handle);
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr GetConsoleWindow();
