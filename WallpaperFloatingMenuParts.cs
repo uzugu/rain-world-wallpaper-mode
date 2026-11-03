@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Menu;
 using RWCustom;
@@ -5,6 +6,64 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
+    /// <summary>
+    /// The timing of the floating settings menu's motion, all counted in menu ticks (40 per second): everything slides
+    /// in from the right, one item after the next from the top, bobs gently while the menu is idle and slides out to
+    /// the right when the menu closes. The functions only turn tick counts into fractions; the menu moves the objects.
+    /// </summary>
+    internal static class FloatingMotion
+    {
+        /// <summary>Ticks one item takes to slide in.</summary>
+        public const int EnterTicks = 14;
+
+        /// <summary>Ticks between the start of one card sliding in and the start of the next one below it.</summary>
+        public const int StaggerTicks = 2;
+
+        /// <summary>Ticks the slide-out takes.</summary>
+        public const int ExitTicks = 8;
+
+        private const float EnterEase = 0.8f;
+        private const float BobAmplitude = 1.5f;
+        private const float BobSpeed = 0.045f;
+        private const float BobPhaseStep = 0.9f;
+
+        /// <summary>
+        /// How much of the slide-in distance an item that starts on tick delay still has left on this tick: 1 until
+        /// its turn comes, 0 once it has arrived. The easing is the game's own S-curve.
+        /// </summary>
+        public static float EnterRemaining(int ticks, int delay)
+        {
+            float progress = Mathf.Clamp01((ticks - delay) / (float)EnterTicks);
+            return 1f - Custom.SCurve(progress, EnterEase);
+        }
+
+        /// <summary>How far the slide-out has come, from 0 when it starts to 1 when it is over.</summary>
+        public static float ExitProgress(int exitTicks)
+        {
+            return Mathf.Clamp01(exitTicks / (float)ExitTicks);
+        }
+
+        /// <summary>
+        /// The share of the slide distance covered by the slide-out. It speeds up as it goes, so the items leave the
+        /// screen quickly instead of drifting away.
+        /// </summary>
+        public static float ExitTravelled(float exitProgress)
+        {
+            return exitProgress * exitProgress;
+        }
+
+        /// <summary>
+        /// The vertical bobbing offset in pixels. Each item bobs with its own phase, so the column ripples. The bob
+        /// grows in as the item arrives and fades out as the menu leaves, so it never fights the slides.
+        /// </summary>
+        public static float Bob(int ticks, int delay, int index, float exitProgress)
+        {
+            float settled = Mathf.Clamp01((ticks - delay) / (float)EnterTicks);
+            double wave = Math.Sin(ticks * (double)BobSpeed + index * (double)BobPhaseStep);
+            return (float)wave * BobAmplitude * settled * (1f - exitProgress);
+        }
+    }
+
     /// <summary>
     /// One control card of the floating settings menu: a translucent rounded rectangle that owns the label and the
     /// control shown on it. The card is a positioned menu object, so everything it owns is drawn relative to it and

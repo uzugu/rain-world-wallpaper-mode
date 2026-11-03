@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Menu;
+using RWCustom;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
@@ -11,7 +12,9 @@ namespace RainWorldWallpaperMod
     /// cards on the right, one per control, floating over the wallpaper, with TRAVEL and CLOSE at the bottom right where
     /// the pause menu keeps CONTINUE and EXIT. It is built from the game's own menu objects, so the mouse, the arrow keys
     /// and controllers all work, and it runs as a side process next to the wallpaper game, so nothing pauses while it is
-    /// open. It does the same things as WallpaperSettingsMenu and differs only in how it looks and is laid out.
+    /// open. It does the same things as WallpaperSettingsMenu and differs only in how it looks, how it is laid out and how
+    /// it moves: the cards slide in from the right one after the next, bob gently while the menu is idle, and slide out
+    /// again when the menu closes itself (see FloatingMotion for the timing).
     /// </summary>
     internal sealed class WallpaperFloatingMenu : Menu.Menu, CheckBox.IOwnCheckBox
     {
@@ -42,6 +45,11 @@ namespace RainWorldWallpaperMod
         private const float HeaderInset = 4f;
         private const float GroupGap = 8f;
         private const float ShadowAlpha = 0.3f;
+        private const int ShadowFadeTicks = 2 * FloatingMotion.EnterTicks;
+
+        // Items slide in from this far to the right of where they rest: the column's width plus its margin plus some
+        // slack, so an item that is still waiting for its turn is entirely off the screen, and so is one that has left.
+        private const float SlideSlack = 12f;
 
         // Signals sent by the arrow buttons and the two bottom buttons.
         private const string SignalCampaignPrev = "CAMPAIGN_PREV";
@@ -75,6 +83,16 @@ namespace RainWorldWallpaperMod
             public float ValueWidth;
         }
 
+        // Something that slides and bobs: a card, a label or a button, with the place it rests at (in page
+        // coordinates), the tick its slide-in starts on and the phase of its bobbing.
+        private sealed class FloatingItem
+        {
+            public PositionedMenuObject Obj;
+            public Vector2 Rest;
+            public int Delay;
+            public int BobIndex;
+        }
+
         private readonly WallpaperController controller;
         private readonly Action closeRequested;
         private readonly float screenLeft;
@@ -83,6 +101,7 @@ namespace RainWorldWallpaperMod
         // constructor), because the base constructor already calls UpdateInfoText.
         private readonly Dictionary<MenuObject, string> descriptions = new Dictionary<MenuObject, string>();
         private readonly List<MenuObject[]> selectableRows = new List<MenuObject[]>();
+        private readonly List<FloatingItem> floaters = new List<FloatingItem>();
 
         // The column, in page coordinates (they include screenLeft), and the cursor the cards are stacked down from.
         private float screenHeight;
@@ -90,7 +109,10 @@ namespace RainWorldWallpaperMod
         private float columnRight;
         private float bottomButtonsY;
         private float layoutTop;
+        private float slideDistance;
+        private int cardCount;
 
+        private DarkGradient shadow;
         private MenuLabel statusLabel;
         private CyclerRow campaignRow;
         private CyclerRow regionRow;
@@ -118,6 +140,10 @@ namespace RainWorldWallpaperMod
         private bool closeRaised;
         private bool isShutDown;
 
+        // The motion clock: ticks since the first update, and ticks since the menu started closing itself.
+        private int ticks;
+        private int exitTicks;
+
         public WallpaperFloatingMenu(ProcessManager manager, WallpaperController controller, Action closeRequested)
             : base(manager, FloatingProcessID)
         {
@@ -134,6 +160,7 @@ namespace RainWorldWallpaperMod
                 BuildShadow();
                 BuildControls();
                 LinkSelectables();
+                PlaceOffScreen();
                 RefreshValueLabels();
                 RefreshStatus();
             }
@@ -156,23 +183,26 @@ namespace RainWorldWallpaperMod
             columnRight = screenSize.x + screenLeft - ColumnRightMargin - safeOffset.x;
             columnLeft = columnRight - ColumnWidth;
             bottomButtonsY = Mathf.Max(safeOffset.y, 15f);
+            slideDistance = ColumnWidth + ColumnRightMargin + safeOffset.x + SlideSlack;
         }
 
         private void BuildShadow()
         {
             // The only thing behind the column is a very light, soft shadow, so the title and the headers stay readable
             // over a bright scene. It is the game's own DarkGradient (a black FlatLight sprite), made before the cards
-            // so that they are drawn over it.
+            // so that they are drawn over it. It stays put and fades in and out with the rest.
             Vector2 center = new Vector2(columnLeft + ColumnWidth / 2f, screenHeight / 2f);
-            pages[0].subObjects.Add(new DarkGradient(this, pages[0], center, ColumnWidth / 2f + 90f, screenHeight / 2f + 20f, ShadowAlpha));
+            shadow = new DarkGradient(this, pages[0], center, ColumnWidth / 2f + 90f, screenHeight / 2f + 20f, 0f);
+            pages[0].subObjects.Add(shadow);
         }
 
         private void BuildControls()
         {
+            // The title and the status line come in first, and bob in phase with the first cards.
             float y = screenHeight - TitleDrop;
-            AddColumnLabel(Translate("WALLPAPER MODE"), y, bigText: true);
+            AddColumnLabel(Translate("WALLPAPER MODE"), y, bigText: true, bobIndex: -1);
             y -= StatusDrop;
-            statusLabel = AddColumnLabel(string.Empty, y, bigText: false);
+            statusLabel = AddColumnLabel(string.Empty, y, bigText: false, bobIndex: 0);
             statusLabel.label.color = MenuRGB(MenuColors.MediumGrey);
             layoutTop = y - StatusBand;
 
@@ -222,6 +252,10 @@ namespace RainWorldWallpaperMod
                 new Vector2(closeX, bottomButtonsY), new Vector2(ButtonWidth, ButtonHeight));
             pages[0].subObjects.Add(travelButton);
             pages[0].subObjects.Add(closeButton);
+
+            // The buttons arrive with the last card and bob in phase with it.
+            AddFloater(travelButton, (cardCount - 1) * FloatingMotion.StaggerTicks, cardCount - 1);
+            AddFloater(closeButton, (cardCount - 1) * FloatingMotion.StaggerTicks, cardCount - 1);
             descriptions[travelButton] = "Apply the campaign, region, room and camera selection, then close.";
             descriptions[closeButton] = "Close this menu without travelling.";
             selectableRows.Add(new MenuObject[] { travelButton, closeButton });
@@ -230,12 +264,20 @@ namespace RainWorldWallpaperMod
             backObject = closeButton;
         }
 
-        // A label centred over the column.
-        private MenuLabel AddColumnLabel(string text, float centerY, bool bigText)
+        // A label centred over the column, which slides in at once.
+        private MenuLabel AddColumnLabel(string text, float centerY, bool bigText, int bobIndex)
         {
             MenuLabel label = new MenuLabel(this, pages[0], text, new Vector2(columnLeft, centerY), new Vector2(ColumnWidth, 0f), bigText);
             pages[0].subObjects.Add(label);
+            AddFloater(label, 0, bobIndex);
             return label;
+        }
+
+        // Registers something that floats. Its resting place is the position it has now, so call this once it is
+        // where it belongs.
+        private void AddFloater(PositionedMenuObject obj, int delay, int bobIndex)
+        {
+            floaters.Add(new FloatingItem { Obj = obj, Rest = obj.pos, Delay = delay, BobIndex = bobIndex });
         }
 
         // Moves the layout cursor down past a small group header and returns the y of the header's text.
@@ -256,15 +298,22 @@ namespace RainWorldWallpaperMod
             label.label.alignment = alignRight ? FLabelAlignment.Right : FLabelAlignment.Left;
             label.label.color = MenuRGB(MenuColors.DarkGrey);
             pages[0].subObjects.Add(label);
+
+            // A header arrives with the first card of its group, which is the next card made, and bobs in phase with it.
+            AddFloater(label, cardCount * FloatingMotion.StaggerTicks, cardCount);
         }
 
-        // The next card down the column. Its parts are positioned relative to it.
+        // The next card down the column. Its parts are positioned relative to it. Cards slide in from the top, one
+        // after the next, and each bobs with a phase of its own.
         private FloatingCard AddCard()
         {
             layoutTop -= CardHeight;
             FloatingCard card = new FloatingCard(this, pages[0], new Vector2(columnLeft, layoutTop), new Vector2(ColumnWidth, CardHeight));
             layoutTop -= CardGap;
             pages[0].subObjects.Add(card);
+
+            AddFloater(card, cardCount * FloatingMotion.StaggerTicks, cardCount);
+            cardCount++;
             return card;
         }
 
@@ -398,9 +447,22 @@ namespace RainWorldWallpaperMod
             RefreshStatus();
             RefreshRowStates();
 
-            // Closing is done here, at the end of the update, the way the game's own side-process dialogs do it.
-            // A process switch freezes the menu's input, so it also closes the menu.
-            if (!closeRaised && (closeQueued || manager.upcomingProcess != null))
+            // The objects stored their previous positions during the base update, so moving them now makes the next
+            // draw interpolate from the old position to the new one.
+            if (closeQueued)
+            {
+                exitTicks++;
+            }
+
+            UpdateMotion();
+            ticks++;
+
+            // Closing is done here, at the end of the update, the way the game's own side-process dialogs do it. When
+            // the menu closes itself it first slides out, and closes on the tick after the last step of the slide was
+            // reached, which is when that step has been drawn. A process switch freezes the menu's input, so it closes
+            // the menu at once. F1 and Escape stop the menu from outside, also at once, without coming through here.
+            bool slideOutDone = closeQueued && exitTicks > FloatingMotion.ExitTicks;
+            if (!closeRaised && (slideOutDone || manager.upcomingProcess != null))
             {
                 closeRaised = true;
                 closeRequested?.Invoke();
@@ -441,6 +503,13 @@ namespace RainWorldWallpaperMod
         {
             base.Singal(sender, message);
 
+            // Once the menu is on its way out it takes no more orders. Without this a second press during the slide-out
+            // would travel twice.
+            if (closeQueued)
+            {
+                return;
+            }
+
             if (message.EndsWith("_PREV", StringComparison.Ordinal) || message.EndsWith("_NEXT", StringComparison.Ordinal))
             {
                 PlaySound(SoundID.MENU_Button_Standard_Button_Pressed);
@@ -464,13 +533,62 @@ namespace RainWorldWallpaperMod
                 case SignalTravel:
                     PlaySound(SoundID.MENU_Button_Standard_Button_Pressed);
                     ApplyTravel();
-                    closeQueued = true;
+                    BeginClose();
                     break;
 
                 case SignalClose:
-                    closeQueued = true;
+                    BeginClose();
                     break;
             }
+        }
+
+        #endregion
+
+        #region Motion
+
+        // Starts the slide-out; the menu closes when it is over. A travel that changes the region has already ended the
+        // menu by now (the region reload closes it), and then there is nothing left to slide.
+        private void BeginClose()
+        {
+            if (isShutDown || closeQueued)
+            {
+                return;
+            }
+
+            closeQueued = true;
+            exitTicks = 0;
+        }
+
+        // Puts every floating item where its slide-in starts, before the first update, so that the first frame that is
+        // drawn already has everything off the screen. The links between the controls were made while they rested.
+        private void PlaceOffScreen()
+        {
+            for (int i = 0; i < floaters.Count; i++)
+            {
+                FloatingItem item = floaters[i];
+                Vector2 start = item.Rest + new Vector2(slideDistance, 0f);
+                item.Obj.pos = start;
+                item.Obj.lastPos = start;
+            }
+        }
+
+        // Moves every floating item to where it belongs on this tick: sliding in, bobbing, or sliding out.
+        private void UpdateMotion()
+        {
+            float exitProgress = closeQueued ? FloatingMotion.ExitProgress(exitTicks) : 0f;
+            float exitTravelled = FloatingMotion.ExitTravelled(exitProgress);
+
+            for (int i = 0; i < floaters.Count; i++)
+            {
+                FloatingItem item = floaters[i];
+                float x = slideDistance * (FloatingMotion.EnterRemaining(ticks, item.Delay) + exitTravelled);
+                float y = FloatingMotion.Bob(ticks, item.Delay, item.BobIndex, exitProgress);
+                item.Obj.pos = item.Rest + new Vector2(x, y);
+            }
+
+            // The shadow does not move; it fades in with the cards and out with them.
+            float shadowIn = Custom.SCurve(Mathf.Clamp01(ticks / (float)ShadowFadeTicks), 0.8f);
+            shadow.alpha = ShadowAlpha * shadowIn * (1f - exitProgress);
         }
 
         #endregion
