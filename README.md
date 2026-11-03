@@ -40,6 +40,8 @@ Recommended launch arguments:
 Notes:
 
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
+- `--wallpaper-host` does the same for a wallpaper host such as Wallpaper Engine or Lively that launches `RainWorld.exe` as a desktop wallpaper: the game keeps running without focus, stays windowed, and hides the BepInEx console. A Steam launch (`steam.exe -applaunch`) cannot be used for this.
+- `--wallpaper-mute` silences the game for that launch only.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
 - `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the settings menu or the tour moves on to the next campaign.
 - `--wallpaper-menu-style <panel|minimal>` picks the settings menu style for that launch only, instead of the Remix **Menu style** setting.
@@ -170,7 +172,7 @@ Both styles hold the same settings and expose the live wallpaper session:
 
 - `HOW_TO_USE.md`: current user guide
 - `ARCHITECTURE.md`: file map and runtime architecture
-- `WALLPAPER_ENGINE.md`: external-app wallpaper setup and launch arguments
+- `WALLPAPER_ENGINE.md`: running the game as a desktop wallpaper (Wallpaper Engine, Lively) and launch arguments
 - `WORKSHOP_PUBLISHING.md`: publishing checklist for Steam Workshop
 
 ## License

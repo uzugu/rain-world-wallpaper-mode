@@ -33,6 +33,11 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - handles region reload setup and campaign advancement
   - keeps the pause button from opening the vanilla pause menu during wallpaper sessions
 
+- `WallpaperHostMode.cs`
+  - `--wallpaper-host` (alias `--wallpaper-engine`): the game is launched by a wallpaper host (Wallpaper Engine, Lively) that embeds its window as the desktop wallpaper
+  - turns on `Application.runInBackground`, hides the BepInEx console window, and keeps the game windowed
+  - hooks `Options.OnLoadFinished`, where Rain World applies its saved resolution and fullscreen setting: once a host has embedded the game window (class `UnityWndClass`), the window is left alone and only Futile's render width is set; before that, the original runs forced windowed. The saved options are not changed
+
 - `WallpaperController.cs`
   - central runtime coordinator
   - owns the active room/region state
