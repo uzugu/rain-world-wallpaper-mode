@@ -535,7 +535,7 @@ namespace RainWorldWallpaperMod
                 }
                 else
                 {
-                    WallpaperMod.Log?.LogInfo($"ChaosManager: Spawned {creatureType} [weight {weight}] in room {spawnRoom.name} (total: {spawnedCreatures.Count}/{maxCreatures})");
+                    WallpaperMod.Log?.LogDebug($"ChaosManager: Spawned {creatureType} [weight {weight}] in room {spawnRoom.name} (total: {spawnedCreatures.Count}/{maxCreatures})");
                 }
             }
             catch (System.Exception ex)
