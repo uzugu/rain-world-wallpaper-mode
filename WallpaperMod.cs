@@ -28,7 +28,6 @@ namespace RainWorldWallpaperMod
         private string commandLineCampaign;
         private WallpaperModOptions.MenuStyle? commandLineMenuStyle;
         private bool hostModeRequested;
-        private bool muteRequested;
         private bool openSettingsOnLaunchRequested;
         private bool openSettingsOnLaunchConsumed;
 
@@ -636,20 +635,12 @@ namespace RainWorldWallpaperMod
             return SlugcatStats.Name.White;
         }
 
-        // What the command line asks of the whole process rather than of one wallpaper session: host mode and muting.
+        // What the command line asks of the whole process rather than of one wallpaper session.
         private void ApplyLaunchEnvironment()
         {
             if (hostModeRequested)
             {
                 WallpaperHostMode.Activate();
-            }
-
-            if (muteRequested)
-            {
-                // Futile's master volume (AudioListener.volume). The game never sets it and it is not saved, so the
-                // mute lasts exactly as long as this process. FSoundManager.isMuted is not used: it also pauses audio.
-                FSoundManager.volume = 0f;
-                Log?.LogInfo("Game audio muted for this run (--wallpaper-mute)");
             }
         }
 
@@ -703,11 +694,6 @@ namespace RainWorldWallpaperMod
                     case "--wallpaper-engine":
                         hostModeRequested = true;
                         autoLaunchWallpaperRequested = true;
-                        break;
-
-                    // Silences the game for this run; it does not start a session by itself.
-                    case "--wallpaper-mute":
-                        muteRequested = true;
                         break;
 
                     case "--wallpaper-region":

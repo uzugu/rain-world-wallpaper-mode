@@ -136,6 +136,7 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<int> RainCountdownMax;
         public readonly Configurable<string> RotStateConfig;
         public readonly Configurable<string> MenuStyleConfig;
+        public readonly Configurable<bool> GameSound;
 
         public WallpaperModOptions()
         {
@@ -157,6 +158,7 @@ namespace RainWorldWallpaperMod
             RainCountdownMax = config.Bind("rainCountdownMax", 180, new ConfigAcceptableRange<int>(RainCountdownMaxRangeMin, RainCountdownMaxRangeMax));
             RotStateConfig = config.Bind("rotState", RotState.Natural.ToString());
             MenuStyleConfig = config.Bind("menuStyle", MenuStyle.Panel.ToString());
+            GameSound = config.Bind("gameSound", true);
         }
 
         // Layout of the Remix page. Remix gives every tab a 600 x 600 canvas with (0, 0) at its bottom left corner.
@@ -183,11 +185,11 @@ namespace RainWorldWallpaperMod
                 page.AddCenteredText("WALLPAPER MODE", 560f, 30f, bigText: true, RemixPage.White);
                 page.AddCenteredText("Hover over a setting to see what it does.", 532f, 20f, bigText: false, RemixPage.DarkGrey);
 
-                // The cards follow the sections of the in-game settings menu, so a setting sits under the same heading in
-                // both places; TIMING holds the durations that only Remix sets. Both columns end at the same height, and
-                // the controls card spans the page below them.
+                // The cards follow the sections of the in-game settings menu; TIMING holds the durations that only Remix
+                // sets, and Skip the rain sits with the travel choices because it decides when the tour moves on. Both
+                // columns hold eight rows so they end at the same height, and the controls card spans the page below.
                 float top = CardsTop;
-                page.BeginCard("TRAVEL", leftColumn, top, CardWidth, RemixPage.CardHeight(4));
+                page.BeginCard("TRAVEL", leftColumn, top, CardWidth, RemixPage.CardHeight(5));
                 page.AddDropdown("Campaign", SelectedCampaign, GetEnumItems(typeof(CampaignChoice), GetCampaignDisplayName),
                     "Which slugcat campaign the wallpaper tours. It decides which regions are visited and what they are called.");
                 page.AddDropdown("Start region", StartRegion, GetRegionItems(),
@@ -196,19 +198,20 @@ namespace RainWorldWallpaperMod
                     "How the camera picks views in rooms with several screens: a random tour, one random view, every view in order, or the first view only.");
                 page.AddDropdown("Watcher world", RotStateConfig, GetEnumItems(typeof(RotState), GetRotStateDisplayName),
                     "Watcher campaign only: the state of the world, from a natural mix to clean, rotted, karma flowers, or rot and flowers together.");
+                page.AddCheckBox("Skip the rain", NoRainTransition,
+                    "Change region at 95% of the cycle instead of waiting for the rain.");
 
-                top -= RemixPage.CardHeight(4) + CardGap;
-                page.BeginCard("CREATURES", leftColumn, top, CardWidth, RemixPage.CardHeight(4));
+                top -= RemixPage.CardHeight(5) + CardGap;
+                page.BeginCard("CREATURES", leftColumn, top, CardWidth, RemixPage.CardHeight(3));
                 page.AddCheckBox("Chaos creatures", EnableChaos,
                     "Spawn extra creatures into the rooms the camera visits.");
                 page.AddNumber("Chaos level", ChaosLevel,
-                    $"How many creatures appear and how quickly ({ChaosLevelRangeMin}-{ChaosLevelRangeMax}): level 1 keeps up to 5 at once, level 10 up to 150.");
+                    $"How many creatures appear and how quickly ({ChaosLevelRangeMin}-{ChaosLevelRangeMax}): level 1 keeps up to 5 at once, level 10 up to 150. Above 7 the game may lag or crash.");
                 page.AddCheckBox("Every creature (experimental)", ChaosSpawnAll,
                     "Experimental: also spawn creature types that are normally left out. May crash the game.");
-                page.AddNote("Levels above 7 may lag or crash.");
 
                 top = CardsTop;
-                page.BeginCard("TIMING", rightColumn, top, CardWidth, RemixPage.CardHeight(5));
+                page.BeginCard("TIMING", rightColumn, top, CardWidth, RemixPage.CardHeight(4));
                 page.AddNumber("Room stay (sec)", StayDuration,
                     $"How long the camera stays in each room before moving on ({StayDurationRangeMin}-{StayDurationRangeMax} seconds).");
                 page.AddNumber("Transition (sec)", TransitionDuration,
@@ -217,20 +220,20 @@ namespace RainWorldWallpaperMod
                     $"When a cycle ends, the rain plays for a random time between the two rain times, then the region changes. Shortest time ({RainCountdownMinRangeMin}-{RainCountdownMinRangeMax} seconds).");
                 page.AddNumber("Rain time max (sec)", RainCountdownMax,
                     $"Longest time the rain plays before the region changes ({RainCountdownMaxRangeMin}-{RainCountdownMaxRangeMax} seconds).");
-                page.AddCheckBox("Skip the rain", NoRainTransition,
-                    "Change region at 95% of the cycle instead of waiting for the rain.");
 
-                top -= RemixPage.CardHeight(5) + CardGap;
-                page.BeginCard("DISPLAY", rightColumn, top, CardWidth, RemixPage.CardHeight(3));
+                top -= RemixPage.CardHeight(4) + CardGap;
+                page.BeginCard("DISPLAY", rightColumn, top, CardWidth, RemixPage.CardHeight(4));
                 page.AddCheckBox("Always show HUD", AlwaysShowHud,
                     "Keep the HUD on screen instead of fading it out. H switches this in-game.");
                 page.AddNumber("HUD fade (sec)", HudFadeDelay,
                     $"How long the HUD stays after the last input before it fades out ({HudFadeDelayRangeMin}-{HudFadeDelayRangeMax} seconds).");
                 page.AddDropdown("Menu style", MenuStyleConfig, GetEnumItems(typeof(MenuStyle), GetMenuStyleDisplayName),
                     "Look of the in-game settings menu (F1 / Tab): Panel, a framed panel with arrows and checkboxes, or Minimal, a plain text list.");
+                page.AddCheckBox("Game sound", GameSound,
+                    "Play the game's music and sounds in wallpaper mode. Off keeps the wallpaper silent; the game's own audio settings are not changed.");
 
                 // The keys that work while the wallpaper runs, as two tables side by side.
-                top -= RemixPage.CardHeight(3) + CardGap;
+                top -= RemixPage.CardHeight(4) + CardGap;
                 float controlsWidth = CanvasSize - 2f * PageMargin;
                 page.BeginCard("CONTROLS", leftColumn, top, controlsWidth, top - PageMargin, RemixPage.KeyRowPitch);
                 float tableWidth = (controlsWidth - 2f * RemixPage.CardPadding) / 2f;
@@ -387,11 +390,6 @@ namespace RainWorldWallpaperMod
                 {
                     description = description
                 });
-            }
-
-            public void AddNote(string text)
-            {
-                AddText(text, contentLeft, TakeRow(), contentRight - contentLeft, DarkGrey);
             }
 
             /// <summary>

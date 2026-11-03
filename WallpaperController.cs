@@ -70,6 +70,8 @@ namespace RainWorldWallpaperMod
                 }
             }
 
+            WallpaperSound.ApplySetting();
+
             WallpaperMod.Log?.LogInfo($"WallpaperController: Initialized (campaign: {WallpaperMod.CurrentCampaign}, start region: {currentRegionCode}, camera mode: {WallpaperModOptions.GetCameraMode(WallpaperMod.Options?.CameraModeConfig.Value ?? WallpaperModOptions.CameraMode.RandomExploration.ToString())})");
         }
 

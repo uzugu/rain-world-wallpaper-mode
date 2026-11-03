@@ -19,9 +19,9 @@ namespace RainWorldWallpaperMod
         // Layout, in the game's 1366x768 menu space with x measured from the left edge of the visible screen
         // (screenLeft converts it, because Menu.Init shifts the page to centre that space on narrower screens).
         private const float PanelLeft = 60f;
-        private const float PanelBottom = 50f;
+        private const float PanelBottom = 36f;
         private const float PanelWidth = 500f;
-        private const float PanelHeight = 668f;
+        private const float PanelHeight = 702f;
         private const float PanelPadding = 24f;
         private const float PanelTop = PanelBottom + PanelHeight;
         private const float ContentLeft = PanelLeft + PanelPadding;
@@ -58,6 +58,7 @@ namespace RainWorldWallpaperMod
         private const string IdChaosSpawnAll = "CHAOSSPAWNALL";
         private const string IdAlwaysShowHud = "ALWAYSSHOWHUD";
         private const string IdNoRainWait = "NORAINWAIT";
+        private const string IdGameSound = "GAMESOUND";
 
         private sealed class CyclerRow
         {
@@ -242,6 +243,9 @@ namespace RainWorldWallpaperMod
             y -= RowPitch;
             AddCheckBox("No Rain Wait", IdNoRainWait, y,
                 "Change region at 95% of the rain cycle instead of waiting for the rain.");
+            y -= RowPitch;
+            AddCheckBox("Game sound", IdGameSound, y,
+                "Play the game's music and sounds. Off keeps the wallpaper silent; your audio settings are not changed.");
 
             AddPanelButtons();
         }
@@ -490,6 +494,7 @@ namespace RainWorldWallpaperMod
                 case IdChaosSpawnAll: return WallpaperMod.Options != null && WallpaperMod.Options.ChaosSpawnAll.Value;
                 case IdAlwaysShowHud: return controller.Hud != null && controller.Hud.AlwaysShowHUD;
                 case IdNoRainWait: return WallpaperMod.Options != null && WallpaperMod.Options.NoRainTransition.Value;
+                case IdGameSound: return WallpaperMod.Options == null || WallpaperMod.Options.GameSound.Value;
                 default: return false;
             }
         }
@@ -528,6 +533,15 @@ namespace RainWorldWallpaperMod
                     {
                         WallpaperMod.Options.NoRainTransition.Value = c;
                     }
+                    break;
+
+                case IdGameSound:
+                    if (WallpaperMod.Options != null)
+                    {
+                        WallpaperMod.Options.GameSound.Value = c;
+                    }
+
+                    WallpaperSound.SetSoundOn(c);
                     break;
             }
         }
