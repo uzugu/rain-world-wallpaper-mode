@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -9,21 +10,28 @@ using UnityEngine;
 namespace RainWorldWallpaperMod
 {
     /// <summary>
-    /// Drives Watcher-specific room states without hard-linking the plugin to Watcher-only types.
-    /// This keeps the Workshop DLL loadable on base/Downpour installs.
+    /// Drives Watcher-specific room states through reflection instead of compiling against Watcher internals.
+    /// The Watcher types ship in Assembly-CSharp on every install (ModManager itself references them), so this
+    /// is not about keeping the DLL loadable. It decouples the mod from members that can change between game
+    /// versions; any member that can no longer be found is reported once in the log and its effect is skipped.
     /// </summary>
     internal sealed class WatcherWorldStateController
     {
         private const float RottedIntensity = 1f;
         private const float KarmaPatchRadius = 520f;
         private const float NaturalSeedInterval = 45f;
+        private const int NoSeedAttempt = -1;
+        private const int MaxLoggedFailures = 32;
 
         private static readonly BindingFlags InstanceFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
         private static readonly BindingFlags StaticFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
         private readonly HashSet<string> naturalInjectedRooms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> loggedFailures = new HashSet<string>();
         private string naturalWorldName;
         private int naturalSeedGeneration;
+        // Generation the seeding pass last ran for in naturalWorldName; reset whenever the seed is cleared.
+        private int naturalSeedAttemptedGeneration = NoSeedAttempt;
         private float naturalSeedTimer;
         private bool warnedUnavailable;
 
@@ -207,16 +215,22 @@ namespace RainWorldWallpaperMod
                 naturalInjectedRooms.Clear();
                 naturalSeedTimer = 0f;
                 naturalSeedGeneration = StableHash(worldName) & 1023;
+                naturalSeedAttemptedGeneration = NoSeedAttempt;
             }
 
             if (rebuildSeed)
             {
                 ClearNaturalSeed(room);
             }
-            else if (naturalInjectedRooms.Count > 0)
+            else if (naturalInjectedRooms.Count > 0 || naturalSeedAttemptedGeneration == naturalSeedGeneration)
             {
+                // Update calls this every tick. Once the pass has run for this world and generation, even
+                // if it seeded nothing, it is not repeated until the seed is rebuilt (refresh timer) or cleared.
                 return;
             }
+
+            // Recorded up front so a pass that seeds nothing, or fails part-way, is not retried every tick.
+            naturalSeedAttemptedGeneration = naturalSeedGeneration;
 
             if (HasSentientRotResistance(worldName))
             {
@@ -264,6 +278,9 @@ namespace RainWorldWallpaperMod
 
         private void ClearNaturalSeed(Room room)
         {
+            // The seed is going away, so the next EnsureNaturalSeed has to run its pass again.
+            naturalSeedAttemptedGeneration = NoSeedAttempt;
+
             IDictionary progression = GetSentientRotProgression(room?.world?.regionState);
             if (progression == null ||
                 naturalInjectedRooms.Count == 0 ||
@@ -624,8 +641,8 @@ namespace RainWorldWallpaperMod
 
         private static bool HasSentientRotResistance(string worldName)
         {
-            MethodInfo method = typeof(Region).GetMethod("HasSentientRotResistance", StaticFlags);
-            return method != null && method.ReturnType == typeof(bool) && (bool)method.Invoke(null, new object[] { worldName });
+            MethodInfo method = ReflectionCache.GetStaticBoolMethod(typeof(Region), "HasSentientRotResistance");
+            return method != null && (bool)method.Invoke(null, new object[] { worldName });
         }
 
         private static IDictionary GetSentientRotProgression(object regionState)
@@ -641,7 +658,7 @@ namespace RainWorldWallpaperMod
 
         private static object CreateSentientRotState(float intensity)
         {
-            Type stateType = typeof(RegionState).GetNestedType("SentientRotState", BindingFlags.Public | BindingFlags.NonPublic);
+            Type stateType = ReflectionCache.GetNestedType(typeof(RegionState), "SentientRotState");
             if (stateType == null)
             {
                 return null;
@@ -665,7 +682,7 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            MethodInfo method = target.GetType().GetMethod(methodName, InstanceFlags);
+            MethodInfo method = ReflectionCache.GetInstanceMethod(target.GetType(), methodName);
             method?.Invoke(target, args);
         }
 
@@ -676,15 +693,18 @@ namespace RainWorldWallpaperMod
                 return fallback;
             }
 
-            Type type = target.GetType();
-            FieldInfo field = type.GetField(memberName, InstanceFlags);
-            if (field != null && field.GetValue(target) is T fieldValue)
+            InstanceMember member = ReflectionCache.GetInstanceMember(target.GetType(), memberName);
+            if (member == null)
+            {
+                return fallback;
+            }
+
+            if (member.Field != null && member.Field.GetValue(target) is T fieldValue)
             {
                 return fieldValue;
             }
 
-            PropertyInfo property = type.GetProperty(memberName, InstanceFlags);
-            if (property != null && property.GetValue(target, null) is T propertyValue)
+            if (member.Property != null && member.Property.GetValue(target, null) is T propertyValue)
             {
                 return propertyValue;
             }
@@ -699,22 +719,25 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            Type type = target.GetType();
-            FieldInfo field = type.GetField(memberName, InstanceFlags);
-            if (field != null)
+            InstanceMember member = ReflectionCache.GetInstanceMember(target.GetType(), memberName);
+            if (member == null)
             {
-                field.SetValue(target, value);
                 return;
             }
 
-            PropertyInfo property = type.GetProperty(memberName, InstanceFlags);
-            if (property != null && property.CanWrite)
+            if (member.Field != null)
             {
-                property.SetValue(target, value, null);
+                member.Field.SetValue(target, value);
+                return;
+            }
+
+            if (member.Property != null && member.Property.CanWrite)
+            {
+                member.Property.SetValue(target, value, null);
             }
         }
 
-        private static void TryWatcherAction(Action action)
+        private void TryWatcherAction(Action action)
         {
             try
             {
@@ -722,7 +745,141 @@ namespace RainWorldWallpaperMod
             }
             catch (Exception ex)
             {
-                WallpaperMod.Log?.LogWarning($"Watcher world-state effect failed and was skipped: {ex.Message}");
+                LogFailureOnce(ex);
+            }
+        }
+
+        // Update runs its action every tick, so a failure that repeats is only logged the first time. Keyed on
+        // the full text, not the message: reflection wraps game exceptions in a TargetInvocationException with
+        // a constant message, and unrelated NullReferenceExceptions share theirs. The cap stops a message
+        // that changes every tick from flooding the log.
+        private void LogFailureOnce(Exception ex)
+        {
+            string details = ex.ToString();
+            bool lastAllowed;
+            lock (loggedFailures)
+            {
+                if (loggedFailures.Count >= MaxLoggedFailures || !loggedFailures.Add(details))
+                {
+                    return;
+                }
+
+                lastAllowed = loggedFailures.Count >= MaxLoggedFailures;
+            }
+
+            WallpaperMod.Log?.LogWarning(
+                $"Watcher world-state effect failed and was skipped (repeats of this failure are not logged again):\n{details}" +
+                (lastAllowed ? "\nFurther distinct Watcher failures will not be logged this session." : string.Empty));
+        }
+
+        private sealed class InstanceMember
+        {
+            public readonly FieldInfo Field;
+            public readonly PropertyInfo Property;
+
+            private InstanceMember(FieldInfo field, PropertyInfo property)
+            {
+                Field = field;
+                Property = property;
+            }
+
+            // Null when the type has neither a field nor a property with that name.
+            public static InstanceMember Find(Type type, string name)
+            {
+                FieldInfo field = type.GetField(name, InstanceFlags);
+                PropertyInfo property = type.GetProperty(name, InstanceFlags);
+                return field != null || property != null ? new InstanceMember(field, property) : null;
+            }
+        }
+
+        /// <summary>
+        /// Caches reflection lookups per type and member name, including lookups that found nothing, so a
+        /// member is searched for once instead of on every call. A member that cannot be found is reported
+        /// once, because otherwise the effect that needs it would silently stop working.
+        /// Only the MemberInfo is cached. Values such as the static enum fields are re-read on every use,
+        /// since the game re-creates them when mods are toggled.
+        /// </summary>
+        private static class ReflectionCache
+        {
+            private static readonly MemberTable<InstanceMember> InstanceMembers = new MemberTable<InstanceMember>(
+                "field or property", InstanceMember.Find);
+            private static readonly MemberTable<MethodInfo> InstanceMethods = new MemberTable<MethodInfo>(
+                "method", (type, name) => type.GetMethod(name, InstanceFlags));
+            private static readonly MemberTable<MethodInfo> StaticBoolMethods = new MemberTable<MethodInfo>(
+                "static method returning bool", FindStaticBoolMethod);
+            private static readonly MemberTable<FieldInfo> StaticFields = new MemberTable<FieldInfo>(
+                "static field", (type, name) => type.GetField(name, StaticFlags));
+            private static readonly MemberTable<Type> NestedTypes = new MemberTable<Type>(
+                "nested type", (type, name) => type.GetNestedType(name, BindingFlags.Public | BindingFlags.NonPublic));
+
+            public static InstanceMember GetInstanceMember(Type type, string name)
+            {
+                return InstanceMembers.Get(type, name);
+            }
+
+            public static MethodInfo GetInstanceMethod(Type type, string name)
+            {
+                return InstanceMethods.Get(type, name);
+            }
+
+            public static MethodInfo GetStaticBoolMethod(Type type, string name)
+            {
+                return StaticBoolMethods.Get(type, name);
+            }
+
+            public static FieldInfo GetStaticField(Type type, string name)
+            {
+                return StaticFields.Get(type, name);
+            }
+
+            public static Type GetNestedType(Type type, string name)
+            {
+                return NestedTypes.Get(type, name);
+            }
+
+            private static MethodInfo FindStaticBoolMethod(Type type, string name)
+            {
+                MethodInfo method = type.GetMethod(name, StaticFlags);
+                return method != null && method.ReturnType == typeof(bool) ? method : null;
+            }
+
+            private sealed class MemberTable<T> where T : class
+            {
+                private readonly ConcurrentDictionary<Type, ConcurrentDictionary<string, T>> byType =
+                    new ConcurrentDictionary<Type, ConcurrentDictionary<string, T>>();
+                private readonly string description;
+                private readonly Func<Type, string, T> find;
+
+                public MemberTable(string description, Func<Type, string, T> find)
+                {
+                    this.description = description;
+                    this.find = find;
+                }
+
+                public T Get(Type type, string name)
+                {
+                    ConcurrentDictionary<string, T> members;
+                    if (!byType.TryGetValue(type, out members))
+                    {
+                        members = byType.GetOrAdd(type, key => new ConcurrentDictionary<string, T>());
+                    }
+
+                    T member;
+                    if (members.TryGetValue(name, out member))
+                    {
+                        return member;
+                    }
+
+                    member = find(type, name);
+                    if (members.TryAdd(name, member) && member == null)
+                    {
+                        WallpaperMod.Log?.LogWarning(
+                            $"Watcher world-state: could not find {description} '{type.FullName}.{name}'; " +
+                            "effects that depend on it will be skipped (the game may have renamed or removed it).");
+                    }
+
+                    return member;
+                }
             }
         }
 
@@ -745,7 +902,13 @@ namespace RainWorldWallpaperMod
 
             private static T GetStaticField<T>(Type type, string fieldName) where T : class
             {
-                return type?.GetField(fieldName, StaticFlags)?.GetValue(null) as T;
+                // A null type was already reported by FindType.
+                if (type == null)
+                {
+                    return null;
+                }
+
+                return ReflectionCache.GetStaticField(type, fieldName)?.GetValue(null) as T;
             }
 
             private static Type FindType(string fullName)
@@ -759,6 +922,10 @@ namespace RainWorldWallpaperMod
                     }
                 }
 
+                // Runs once per type (static readonly fields above), so this warns once.
+                WallpaperMod.Log?.LogWarning(
+                    $"Watcher world-state: could not find type '{fullName}'; effects that depend on it will be skipped " +
+                    "(the game may have renamed or removed it).");
                 return null;
             }
         }
