@@ -29,7 +29,44 @@ namespace RainWorldWallpaperMod
             "wallpaper64.exe", "wallpaper32.exe", "ui32.exe", "lively.exe", "livelywpf.exe"
         };
 
+        private const string RainWorldSteamAppId = "312520";
+
         internal static bool Active { get; private set; }
+
+        /// <summary>
+        /// Programs that are Steam apps themselves, such as Wallpaper Engine (app 431960), pass their own SteamAppId and
+        /// SteamGameId on to the programs they start. Steam reads SteamAppId before steam_appid.txt, so Rain World would
+        /// sign in to Steam as that app; its start-up Workshop check then waits for the other app's Workshop items to
+        /// download and never finishes. This puts Rain World's app ID back. It has to run before the game starts Steam,
+        /// which the plugin's OnEnable does: BepInEx loads plugins before the first MonoBehaviour wakes up, and the game's
+        /// SteamManager is only created later, by the ProcessManager. Steam cannot be started twice in one process, so
+        /// there is no later chance.
+        /// </summary>
+        internal static void EnsureRainWorldSteamAppId()
+        {
+            try
+            {
+                string appId = Environment.GetEnvironmentVariable("SteamAppId");
+                string gameId = Environment.GetEnvironmentVariable("SteamGameId");
+                bool foreignAppId = !string.IsNullOrEmpty(appId) && appId != RainWorldSteamAppId;
+                bool foreignGameId = !string.IsNullOrEmpty(gameId) && gameId != RainWorldSteamAppId;
+                if (!foreignAppId && !foreignGameId)
+                {
+                    return;
+                }
+
+                // The process environment itself, which Steam's own DLL reads when it loads.
+                SetEnvironmentVariable("SteamAppId", RainWorldSteamAppId);
+                SetEnvironmentVariable("SteamGameId", RainWorldSteamAppId);
+                WallpaperMod.Log?.LogInfo(
+                    $"The program that started the game passed Steam app ID {(foreignAppId ? appId : gameId)}; set it back to " +
+                    $"Rain World's ({Environment.GetEnvironmentVariable("SteamAppId")}) before Steam starts");
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogWarning($"Could not set Rain World's Steam app ID: {ex.Message}");
+            }
+        }
 
         /// <summary>
         /// Returns the executable name of the process that started the game when it is a known wallpaper host, and null
@@ -296,6 +333,10 @@ namespace RainWorldWallpaperMod
         [DllImport("kernel32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CloseHandle(IntPtr handle);
+
+        [DllImport("kernel32.dll", EntryPoint = "SetEnvironmentVariableW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetEnvironmentVariable(string name, string value);
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr GetConsoleWindow();

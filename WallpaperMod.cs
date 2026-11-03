@@ -39,6 +39,10 @@ namespace RainWorldWallpaperMod
             Log = Logger;
             Log?.LogInfo("Rain World Wallpaper Mod V2.0 loaded!");
 
+            // First, before the game starts Steam: a launcher that is a Steam app itself (Wallpaper Engine) passes its own
+            // app ID on, and Rain World would otherwise sign in to Steam as that app.
+            WallpaperHostMode.EnsureRainWorldSteamAppId();
+
             ParseCommandLineArguments();
             ApplyLaunchEnvironment();
 
