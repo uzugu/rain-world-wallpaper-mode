@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
-    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.1.6")]
+    [BepInPlugin("com.uzugu.wallpapermod", "Rain World Wallpaper Mode", "1.2.0")]
     public class WallpaperMod : BaseUnityPlugin
     {
         public static WallpaperMod Instance;
