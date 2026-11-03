@@ -101,16 +101,18 @@ namespace RainWorldWallpaperMod
         // Allowed ranges for the numeric settings (seconds unless noted). Remix enforces them through the
         // configurables' acceptable ranges, and WallpaperSettingsOverlay reuses them for its runtime changes
         // so the two cannot drift apart.
-        public const float TransitionDurationRangeMin = 0.5f;
-        public const float TransitionDurationRangeMax = 60f;
-        public const float StayDurationRangeMin = 1f;
-        public const float StayDurationRangeMax = 600f;
-        public const float HudFadeDelayRangeMin = 0f;
-        public const float HudFadeDelayRangeMax = 60f;
+        public const float TransitionDurationRangeMin = 1f;
+        public const float TransitionDurationRangeMax = 15f;
+        public const float StayDurationRangeMin = 5f;
+        public const float StayDurationRangeMax = 60f;
+        public const float HudFadeDelayRangeMin = 1f;
+        public const float HudFadeDelayRangeMax = 10f;
         public const int ChaosLevelRangeMin = 1;
         public const int ChaosLevelRangeMax = 10;
-        public const int RainCountdownRangeMin = 0;
-        public const int RainCountdownRangeMax = 600;
+        public const int RainCountdownMinRangeMin = 10;
+        public const int RainCountdownMinRangeMax = 300;
+        public const int RainCountdownMaxRangeMin = 30;
+        public const int RainCountdownMaxRangeMax = 600;
 
         // Configuration values
         public readonly Configurable<float> TransitionDuration;
@@ -144,8 +146,8 @@ namespace RainWorldWallpaperMod
             ChaosLevel = config.Bind("chaosLevel", 1, new ConfigAcceptableRange<int>(ChaosLevelRangeMin, ChaosLevelRangeMax));
             ChaosSpawnAll = config.Bind("chaosSpawnAll", false);
             NoRainTransition = config.Bind("noRainTransition", false);
-            RainCountdownMin = config.Bind("rainCountdownMin", 60, new ConfigAcceptableRange<int>(RainCountdownRangeMin, RainCountdownRangeMax));
-            RainCountdownMax = config.Bind("rainCountdownMax", 180, new ConfigAcceptableRange<int>(RainCountdownRangeMin, RainCountdownRangeMax));
+            RainCountdownMin = config.Bind("rainCountdownMin", 60, new ConfigAcceptableRange<int>(RainCountdownMinRangeMin, RainCountdownMinRangeMax));
+            RainCountdownMax = config.Bind("rainCountdownMax", 180, new ConfigAcceptableRange<int>(RainCountdownMaxRangeMin, RainCountdownMaxRangeMax));
             RotStateConfig = config.Bind("rotState", RotState.Natural.ToString());
         }
 
@@ -204,14 +206,14 @@ namespace RainWorldWallpaperMod
 
                 // Rain Countdown Min
                 OpUpdown rainCountdownMinBox = new OpUpdown(RainCountdownMin, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMinBox.description = $"Minimum seconds for rain countdown before region change ({RainCountdownRangeMin}-{RainCountdownRangeMax})";
+                rainCountdownMinBox.description = $"Minimum seconds for rain countdown before region change ({RainCountdownMinRangeMin}-{RainCountdownMinRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Min (sec):"));
                 uiElements.Add(rainCountdownMinBox);
                 leftYPos -= lineHeight;
 
                 // Rain Countdown Max
                 OpUpdown rainCountdownMaxBox = new OpUpdown(RainCountdownMax, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMaxBox.description = $"Maximum seconds for rain countdown before region change ({RainCountdownRangeMin}-{RainCountdownRangeMax})";
+                rainCountdownMaxBox.description = $"Maximum seconds for rain countdown before region change ({RainCountdownMaxRangeMin}-{RainCountdownMaxRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Max (sec):"));
                 uiElements.Add(rainCountdownMaxBox);
 
@@ -251,7 +253,7 @@ namespace RainWorldWallpaperMod
 
                 // Chaos Level
                 OpUpdown chaosLevelBox = new OpUpdown(ChaosLevel, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                chaosLevelBox.description = "Chaos intensity: 1 = Controlled (50 max), 10 = ABSOLUTE CHAOS (250 max)";
+                chaosLevelBox.description = "Chaos intensity: 1 = Minimal (5 creatures max), 10 = ABSOLUTE CHAOS (150 creatures max)";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Chaos Level:"));
                 uiElements.Add(chaosLevelBox);
                 rightYPos -= lineHeight;
