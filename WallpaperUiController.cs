@@ -34,6 +34,23 @@ namespace RainWorldWallpaperMod
             hasInitializedHud = true;
             hud.RegisterUserActivity();
             WallpaperMod.Log?.LogInfo("WallpaperController: HUD initialized successfully");
+
+            OpenSettingsIfRequestedAtLaunch(controller);
+        }
+
+        /// <summary>
+        /// Opens the settings menu if the process was started with --wallpaper-open-settings, a testing aid. The request
+        /// is used up by the first session that gets here, so later sessions (region reloads) do not open it again.
+        /// </summary>
+        private void OpenSettingsIfRequestedAtLaunch(WallpaperController controller)
+        {
+            if (WallpaperMod.Instance == null || !WallpaperMod.Instance.TryConsumeOpenSettingsRequest())
+            {
+                return;
+            }
+
+            WallpaperMod.Log?.LogInfo("WallpaperController: Opening the settings menu (--wallpaper-open-settings)");
+            OpenSettingsMenu(controller);
         }
 
         public void ToggleSettingsMenu(WallpaperController controller)

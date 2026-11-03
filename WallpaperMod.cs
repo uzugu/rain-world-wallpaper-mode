@@ -26,6 +26,8 @@ namespace RainWorldWallpaperMod
         private string requestedStartRoom = "SU_A01";
         private string commandLineStartRegion;
         private string commandLineCampaign;
+        private bool openSettingsOnLaunchRequested;
+        private bool openSettingsOnLaunchConsumed;
 
         public static ManualLogSource Log { get; private set; }
 
@@ -92,6 +94,21 @@ namespace RainWorldWallpaperMod
         internal bool HasPendingAutoLaunchRequest()
         {
             return autoLaunchWallpaperRequested && !autoLaunchWallpaperConsumed && !pendingWallpaperLaunch;
+        }
+
+        /// <summary>
+        /// Returns true once, when --wallpaper-open-settings was passed, for the first wallpaper session of the process
+        /// to open its settings menu. It is a testing aid that puts the menu on screen without any input.
+        /// </summary>
+        internal bool TryConsumeOpenSettingsRequest()
+        {
+            if (!openSettingsOnLaunchRequested || openSettingsOnLaunchConsumed)
+            {
+                return false;
+            }
+
+            openSettingsOnLaunchConsumed = true;
+            return true;
         }
 
         private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -570,8 +587,8 @@ namespace RainWorldWallpaperMod
             : Options?.SelectedCampaign.Value ?? WallpaperModOptions.CampaignChoice.White.ToString();
 
         /// <summary>
-        /// Ends the --wallpaper-campaign override. Called when the campaign changes during a session (overlay quick travel,
-        /// campaign advancement), after the new campaign was written to Options.SelectedCampaign, so that it takes effect.
+        /// Ends the --wallpaper-campaign override. Called when the campaign changes during a session (settings menu quick
+        /// travel, campaign advancement), after the new campaign was written to Options.SelectedCampaign, so that it takes effect.
         /// </summary>
         internal void ClearCampaignOverride()
         {
@@ -663,7 +680,17 @@ namespace RainWorldWallpaperMod
                         commandLineCampaign = ParseCampaignOverride(inlineValue ?? TryReadArgumentValue(args, ref i));
                         autoLaunchWallpaperRequested = true;
                         break;
+
+                    // Testing aid: it only changes what the first session does, so it does not start one by itself.
+                    case "--wallpaper-open-settings":
+                        openSettingsOnLaunchRequested = true;
+                        break;
                 }
+            }
+
+            if (openSettingsOnLaunchRequested)
+            {
+                Log?.LogInfo("The settings menu will open when the first wallpaper session is ready (--wallpaper-open-settings)");
             }
 
             if (!autoLaunchWallpaperRequested)
