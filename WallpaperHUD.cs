@@ -61,6 +61,7 @@ namespace RainWorldWallpaperMod
 
         // What the location lines currently show, so that text is only rebuilt when it changes
         private string shownRegionCode;
+        private string shownRegionName;
         private string shownNextRegionCode;
         private string shownRoom;
         private string shownNextRoom;
@@ -302,7 +303,11 @@ namespace RainWorldWallpaperMod
             }
 
             shownRegionCode = code;
-            SetLineText(locationBlock, regionLine, WallpaperHudText.ResolveRegionName(code, translator));
+            shownRegionName = WallpaperHudText.ResolveRegionName(code, translator);
+            SetLineText(locationBlock, regionLine, shownRegionName);
+
+            // The sub-region line leaves out a name that repeats the region's, so check it again against the new one.
+            shownSubregionIndex = -1;
             return true;
         }
 
@@ -316,6 +321,13 @@ namespace RainWorldWallpaperMod
                 shownSubregionIndex = index;
                 shownSubregionRegion = region;
                 string name = index > 0 ? WallpaperHudText.GetSubregionName(region, index, translator) : string.Empty;
+
+                // Some regions name a sub-region after themselves (SU's "Outskirts"); do not show the name twice.
+                if (string.Equals(name, shownRegionName, StringComparison.OrdinalIgnoreCase))
+                {
+                    name = string.Empty;
+                }
+
                 SetLineText(locationBlock, subregionLine, name);
             }
 
