@@ -292,7 +292,8 @@ namespace RainWorldWallpaperMod
 
         private FLabel CreateLabel(float x, float y, string text)
         {
-            return new FLabel("font", text)
+            // Region and campaign names come from the game in its current language, so use that language's font.
+            return new FLabel(RWCustom.Custom.GetFont(), text)
             {
                 x = x,
                 y = y,
