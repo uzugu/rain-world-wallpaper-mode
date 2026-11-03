@@ -8,8 +8,8 @@ using UnityEngine;
 namespace RainWorldWallpaperMod
 {
     /// <summary>
-    /// The minimalistic layout of the wallpaper settings and quick-travel menu (--wallpaper-menu-style minimal). It
-    /// holds the same settings and works the same way as the panel, but it is only text: one column at the left of the
+    /// The minimalistic layout of the wallpaper settings and quick-travel menu, picked with the Remix "Menu style"
+    /// setting (or --wallpaper-menu-style minimal). It holds the same settings and works the same way as the panel, but it is only text: one column at the left of the
     /// screen, a status line above it, labels in dark grey with the value of each setting beside them, and no panel,
     /// borders or section headers. The column stands on a soft darkening that fades out towards the middle of the screen.
     /// The selected row brightens and gets a thin marker.

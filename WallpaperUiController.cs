@@ -78,10 +78,11 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
+            WallpaperModOptions.MenuStyle style = WallpaperMod.CurrentMenuStyle;
             global::Menu.Menu menu;
             try
             {
-                menu = CreateSettingsMenu(manager, controller);
+                menu = CreateSettingsMenu(manager, controller, style);
                 manager.sideProcesses.Add(menu);
             }
             catch (Exception ex)
@@ -93,15 +94,16 @@ namespace RainWorldWallpaperMod
             settingsMenu = menu;
             menu.PlaySound(SoundID.MENU_Switch_Page_In);
             hud?.SetSettingsMenuOpen(true);
+            WallpaperMod.Log?.LogInfo($"WallpaperController: Opened the settings menu ({style} style)");
         }
 
-        // --wallpaper-menu-style minimal picks the minimalistic layout; the panel is the default.
-        private global::Menu.Menu CreateSettingsMenu(ProcessManager manager, WallpaperController controller)
+        // The style comes from the Remix "Menu style" setting, or from --wallpaper-menu-style when it was given.
+        private global::Menu.Menu CreateSettingsMenu(ProcessManager manager, WallpaperController controller, WallpaperModOptions.MenuStyle style)
         {
             Action closeRequested = () => CloseSettingsMenu();
-            switch (WallpaperMod.Instance?.MenuStyle)
+            switch (style)
             {
-                case "minimal":
+                case WallpaperModOptions.MenuStyle.Minimal:
                     return new WallpaperMinimalMenu(manager, controller, closeRequested);
                 default:
                     return new WallpaperSettingsMenu(manager, controller, closeRequested);

@@ -98,6 +98,12 @@ namespace RainWorldWallpaperMod
             RottedKarma // Sentient Rot and karma flowers together
         }
 
+        public enum MenuStyle
+        {
+            Panel,      // WallpaperSettingsMenu: a framed panel with arrow buttons and checkboxes (default)
+            Minimal     // WallpaperMinimalMenu: a text-only column over a soft shade
+        }
+
         // Allowed ranges for the numeric settings (seconds unless noted). Remix enforces them through the
         // configurables' acceptable ranges, and WallpaperSettingsMenu reuses them for its runtime changes
         // so the two cannot drift apart.
@@ -129,6 +135,7 @@ namespace RainWorldWallpaperMod
         public readonly Configurable<int> RainCountdownMin;
         public readonly Configurable<int> RainCountdownMax;
         public readonly Configurable<string> RotStateConfig;
+        public readonly Configurable<string> MenuStyleConfig;
 
         public WallpaperModOptions()
         {
@@ -149,6 +156,7 @@ namespace RainWorldWallpaperMod
             RainCountdownMin = config.Bind("rainCountdownMin", 60, new ConfigAcceptableRange<int>(RainCountdownMinRangeMin, RainCountdownMinRangeMax));
             RainCountdownMax = config.Bind("rainCountdownMax", 180, new ConfigAcceptableRange<int>(RainCountdownMaxRangeMin, RainCountdownMaxRangeMax));
             RotStateConfig = config.Bind("rotState", RotState.Natural.ToString());
+            MenuStyleConfig = config.Bind("menuStyle", MenuStyle.Panel.ToString());
         }
 
         public override void Initialize()
@@ -216,6 +224,11 @@ namespace RainWorldWallpaperMod
                 rainCountdownMaxBox.description = $"Maximum seconds for rain countdown before region change ({RainCountdownMaxRangeMin}-{RainCountdownMaxRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Max (sec):"));
                 uiElements.Add(rainCountdownMaxBox);
+                leftYPos -= lineHeight;
+
+                // Menu Style label (dropdown added later)
+                float menuStyleYPos = leftYPos;
+                uiElements.Add(new OpLabel(leftColumnLabel, menuStyleYPos, "Menu Style:"));
 
                 // === RIGHT COLUMN ===
                 float rightYPos = yPos;
@@ -333,8 +346,20 @@ namespace RainWorldWallpaperMod
                 ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
                 rotStateDropdown.description = "Watcher environmental state: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma";
 
+                var menuStyleDropdown = new OpComboBox(
+                    MenuStyleConfig,
+                    new Vector2(leftColumnControl, menuStyleYPos - 5f),
+                    140f,
+                    OpResourceSelector.GetEnumNames(null, typeof(MenuStyle)).Select(li =>
+                    {
+                        li.displayName = GetMenuStyleDisplayName(li.name);
+                        return li;
+                    }).ToList()
+                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
+                menuStyleDropdown.description = "Look of the in-game settings menu: a framed panel, or a minimal text list";
+
                 // Add dropdowns last to ensure they render on top
-                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown, rotStateDropdown });
+                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown, rotStateDropdown, menuStyleDropdown });
 
                 WallpaperMod.Log?.LogInfo("WallpaperModOptions: UI initialized successfully");
             }
@@ -478,6 +503,47 @@ namespace RainWorldWallpaperMod
                 case "Rotted": return "Rotted (Rot Spread)";
                 case "Karma": return "Karma Flowers";
                 case "RottedKarma": return "Rot + Karma Flowers";
+                default: return enumName;
+            }
+        }
+
+        /// <summary>
+        /// Reads a menu style by name ("Panel" or "Minimal", in any case). Unlike Enum.TryParse it refuses numbers,
+        /// which would otherwise turn into styles that do not exist.
+        /// </summary>
+        public static bool TryParseMenuStyle(string styleStr, out MenuStyle style)
+        {
+            style = MenuStyle.Panel;
+            if (string.IsNullOrWhiteSpace(styleStr))
+            {
+                return false;
+            }
+
+            string trimmed = styleStr.Trim();
+            foreach (MenuStyle candidate in (MenuStyle[])Enum.GetValues(typeof(MenuStyle)))
+            {
+                if (string.Equals(candidate.ToString(), trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    style = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Helper method to convert menu style string to enum; anything unreadable means the panel
+        public static MenuStyle GetMenuStyle(string styleStr)
+        {
+            return TryParseMenuStyle(styleStr, out MenuStyle style) ? style : MenuStyle.Panel;
+        }
+
+        private string GetMenuStyleDisplayName(string enumName)
+        {
+            switch (enumName)
+            {
+                case "Panel": return "Panel";
+                case "Minimal": return "Minimal";
                 default: return enumName;
             }
         }

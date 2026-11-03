@@ -26,6 +26,7 @@ namespace RainWorldWallpaperMod
         private string requestedStartRoom = "SU_A01";
         private string commandLineStartRegion;
         private string commandLineCampaign;
+        private WallpaperModOptions.MenuStyle? commandLineMenuStyle;
         private bool openSettingsOnLaunchRequested;
         private bool openSettingsOnLaunchConsumed;
 
@@ -110,11 +111,6 @@ namespace RainWorldWallpaperMod
             openSettingsOnLaunchConsumed = true;
             return true;
         }
-
-        /// <summary>
-        /// Settings menu layout picked with --wallpaper-menu-style ("panel" or "minimal"); null means the panel.
-        /// </summary>
-        internal string MenuStyle { get; private set; }
 
         private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
@@ -592,6 +588,13 @@ namespace RainWorldWallpaperMod
             : Options?.SelectedCampaign.Value ?? WallpaperModOptions.CampaignChoice.White.ToString();
 
         /// <summary>
+        /// The look of the in-game settings menu: the --wallpaper-menu-style override when one was given, otherwise the
+        /// Remix "Menu style" setting. It is read each time the menu opens.
+        /// </summary>
+        internal static WallpaperModOptions.MenuStyle CurrentMenuStyle =>
+            Instance?.commandLineMenuStyle ?? WallpaperModOptions.GetMenuStyle(Options?.MenuStyleConfig.Value);
+
+        /// <summary>
         /// Ends the --wallpaper-campaign override. Called when the campaign changes during a session (settings menu quick
         /// travel, campaign advancement), after the new campaign was written to Options.SelectedCampaign, so that it takes effect.
         /// </summary>
@@ -691,9 +694,9 @@ namespace RainWorldWallpaperMod
                         openSettingsOnLaunchRequested = true;
                         break;
 
-                    // Picks the settings menu layout; it does not start a session either.
+                    // Overrides the Remix menu style for this run; it does not start a session either.
                     case "--wallpaper-menu-style":
-                        MenuStyle = (inlineValue ?? TryReadArgumentValue(args, ref i))?.Trim().ToLowerInvariant();
+                        commandLineMenuStyle = ParseMenuStyleOverride(inlineValue ?? TryReadArgumentValue(args, ref i));
                         break;
                 }
             }
@@ -703,9 +706,9 @@ namespace RainWorldWallpaperMod
                 Log?.LogInfo("The settings menu will open when the first wallpaper session is ready (--wallpaper-open-settings)");
             }
 
-            if (!string.IsNullOrEmpty(MenuStyle))
+            if (commandLineMenuStyle != null)
             {
-                Log?.LogInfo($"Settings menu style: {MenuStyle} (--wallpaper-menu-style)");
+                Log?.LogInfo($"Settings menu style: {commandLineMenuStyle} (--wallpaper-menu-style)");
             }
 
             if (!autoLaunchWallpaperRequested)
@@ -759,6 +762,17 @@ namespace RainWorldWallpaperMod
             }
 
             Log?.LogWarning($"Ignoring unknown wallpaper campaign override '{value}'");
+            return null;
+        }
+
+        private WallpaperModOptions.MenuStyle? ParseMenuStyleOverride(string value)
+        {
+            if (WallpaperModOptions.TryParseMenuStyle(value?.Trim('"', ' '), out WallpaperModOptions.MenuStyle style))
+            {
+                return style;
+            }
+
+            Log?.LogWarning($"Ignoring unknown settings menu style '{value}'; use panel or minimal");
             return null;
         }
 
