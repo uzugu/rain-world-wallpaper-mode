@@ -92,7 +92,7 @@ namespace RainWorldWallpaperMod
 
             settingsMenu = menu;
             menu.PlaySound(SoundID.MENU_Switch_Page_In);
-            hud?.RegisterUserActivity();
+            hud?.SetSettingsMenuOpen(true);
         }
 
         // The layouts are prototypes being compared; --wallpaper-menu-style picks one, the panel is the default.
@@ -123,6 +123,7 @@ namespace RainWorldWallpaperMod
             }
 
             settingsMenu = null;
+            hud?.SetSettingsMenuOpen(false);
 
             try
             {

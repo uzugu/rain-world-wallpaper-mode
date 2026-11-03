@@ -56,6 +56,7 @@ namespace RainWorldWallpaperMod
         private bool alwaysShowHUD;
         private float idleSeconds;
         private int titleHoldTicks;
+        private bool settingsMenuOpen;
         private bool destroyed;
         private bool faulted;
 
@@ -236,13 +237,15 @@ namespace RainWorldWallpaperMod
 
                 // The location block is also held up by a region or sub-region announcement; the other two only show
                 // with the full HUD. The announcement's hold only runs down once the block has finished fading in.
-                bool fullHud = alwaysShowHUD || idleSeconds < GetFadeDelay();
+                // While the settings menu is open the HUD steps aside: the menu shows the same status, and its hint
+                // line sits where the controls hint would.
+                bool fullHud = !settingsMenuOpen && (alwaysShowHUD || idleSeconds < GetFadeDelay());
                 if (titleHoldTicks > 0 && locationBlock.IsFullyShown)
                 {
                     titleHoldTicks--;
                 }
 
-                locationBlock.Step(fullHud || titleHoldTicks > 0);
+                locationBlock.Step(fullHud || (!settingsMenuOpen && titleHoldTicks > 0));
                 rainBlock.Step(fullHud);
                 controlsBlock.Step(fullHud);
 
@@ -543,6 +546,18 @@ namespace RainWorldWallpaperMod
         public void RegisterUserActivity()
         {
             idleSeconds = 0f;
+        }
+
+        /// <summary>
+        /// Hides the HUD while the settings menu is open, and shows it again for the fade delay once the menu closes.
+        /// </summary>
+        public void SetSettingsMenuOpen(bool open)
+        {
+            settingsMenuOpen = open;
+            if (!open)
+            {
+                idleSeconds = 0f;
+            }
         }
 
         public void SetAlwaysShowHUD(bool value, bool hideImmediately = false)
