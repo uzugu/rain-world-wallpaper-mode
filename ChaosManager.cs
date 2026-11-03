@@ -203,18 +203,6 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            // DEBUG: Manual Spawn Triggers
-            // if (Input.GetKeyDown(KeyCode.P))
-            // {
-            //     WallpaperMod.Log?.LogInfo("DEBUG: Forcing SlugNPC Spawn!");
-            //     SpawnCreature("SlugNPC");
-            // }
-            // if (Input.GetKeyDown(KeyCode.O))
-            // {
-            //     WallpaperMod.Log?.LogInfo("DEBUG: Forcing Scavenger Spawn!");
-            //     SpawnCreature("Scavenger");
-            // }
-
             // Wait for world to fully load before analyzing creatures
             if (!hasAnalyzedRegion)
             {
@@ -243,80 +231,6 @@ namespace RainWorldWallpaperMod
                 spawnTimer = 0f;
             }
         }
-
-        private void SpawnCreature(string type)
-        {
-             try
-            {
-                if (game?.world == null) return;
-                
-                // Find a room
-                AbstractRoom spawnRoom = null;
-                
-                // Try to find a neighbor of the current camera room first
-                if (game.cameras != null && game.cameras.Length > 0 && game.cameras[0].room != null)
-                {
-                    Room currentRoom = game.cameras[0].room;
-                    if (currentRoom.abstractRoom.connections != null && currentRoom.abstractRoom.connections.Length > 0)
-                    {
-                        int neighborIndex = currentRoom.abstractRoom.connections[UnityEngine.Random.Range(0, currentRoom.abstractRoom.connections.Length)];
-                        if (neighborIndex > -1 && neighborIndex < game.world.abstractRooms.Length)
-                        {
-                            spawnRoom = game.world.abstractRooms[neighborIndex];
-                        }
-                    }
-                    
-                    // Fallback to current room if no neighbor
-                    if (spawnRoom == null) spawnRoom = currentRoom.abstractRoom;
-                }
-
-                if (spawnRoom == null)
-                {
-                     WallpaperMod.Log?.LogInfo("DEBUG: Could not find spawn room!");
-                     return;
-                }
-
-                WallpaperMod.Log?.LogInfo($"DEBUG: Spawning {type} in {spawnRoom.name}");
-
-                CreatureTemplate.Type creatureType = new CreatureTemplate.Type(type);
-                if (creatureType == null)
-                {
-                     // Try to parse if it's a special type
-                     try {
-                        creatureType = (CreatureTemplate.Type)ExtEnum<CreatureTemplate.Type>.Parse(typeof(CreatureTemplate.Type), type, true);
-                     } catch {}
-                }
-
-                 if (StaticWorld.GetCreatureTemplate(creatureType) == null)
-                {
-                    WallpaperMod.Log?.LogInfo($"DEBUG: Template for {type} is NULL!");
-                    return;
-                }
-
-                WorldCoordinate spawnPos = spawnRoom.RandomNodeInRoom();
-                // Ensure valid den or exit if possible, otherwise random
-                
-                AbstractCreature abstractCreature = new AbstractCreature(game.world, StaticWorld.GetCreatureTemplate(creatureType), null, spawnPos, game.GetNewID());
-                spawnRoom.AddEntity(abstractCreature);
-                abstractCreature.RealizeInRoom();
-                if (abstractCreature.abstractAI == null)
-                {
-                    abstractCreature.InitiateAI(); // Only init if missing
-                }
-
-                WallpaperMod.Log?.LogInfo($"DEBUG: Successfully spawned {type} ID: {abstractCreature.ID}");
-
-                if (type.Contains("Scavenger")) EquipScavenger(abstractCreature);
-                if (type == "SlugNPC") HandleSlugNPC(abstractCreature);
-            }
-            catch (Exception ex)
-            {
-                WallpaperMod.Log?.LogError($"DEBUG: Error spawning {type}: {ex}");
-            }
-        }
-
-        // ... (rest of file)
-
 
         /// <summary>
         /// Analyze the current region to determine what creatures spawn naturally
