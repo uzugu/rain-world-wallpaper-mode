@@ -603,12 +603,42 @@ namespace RainWorldWallpaperMod
                     return true;
                 }
 
-                if (creature.realizedCreature != null && creature.realizedCreature.slatedForDeletetion)
+                if (!IsGoneFromWorld(creature))
                 {
-                    return true; // Remove from list
+                    return false;
                 }
-                return false;
+
+                // HandleSlugNPC added pups to game.Players, so a pup that is gone must not stay there
+                if (game?.session != null)
+                {
+                    game.Players.Remove(creature);
+                }
+                return true; // Remove from list
             });
+        }
+
+        /// <summary>
+        /// True once the game has destroyed the creature or taken it out of the world. Checking only the realized creature
+        /// misses creatures removed while abstract: AbstractCreature.Abstractize can destroy one whose realizedCreature is
+        /// already null, and AbstractRoom.Abstractize turns a live quantified creature (Fly, Leech, Spider) that has stuck
+        /// objects into a per-room count with RemoveEntity, without destroying it. Either way the entry would hold a
+        /// maxCreatures slot for the rest of the world session.
+        /// </summary>
+        private static bool IsGoneFromWorld(AbstractCreature creature)
+        {
+            if (creature.slatedForDeletion ||
+                (creature.realizedCreature != null && creature.realizedCreature.slatedForDeletetion))
+            {
+                return true;
+            }
+
+            if (!creature.creatureTemplate.quantified || creature.realizedCreature != null)
+            {
+                return false;
+            }
+
+            AbstractRoom room = creature.Room;
+            return room != null && !room.creatures.Contains(creature) && !room.entitiesInDens.Contains(creature);
         }
 
         private static bool IsBlacklisted(CreatureTemplate.Type type)
