@@ -59,12 +59,11 @@ The Microsoft Store edition of Lively does not support application wallpapers.
 ## Launch Arguments
 
 ```text
---wallpaper-host -screen-fullscreen 0 --wallpaper-mute --wallpaper-region SU --wallpaper-campaign White
+--wallpaper-host -screen-fullscreen 0 --wallpaper-region SU --wallpaper-campaign White
 ```
 
 - `--wallpaper-host` (or `--wallpaper-engine`): run as a hosted desktop wallpaper, as described above. Starts wallpaper mode.
 - `--wallpaper`: only start wallpaper mode without a click, for example to run it in a normal window on a second monitor.
-- `--wallpaper-mute`: silence the game for that run. Your audio settings are not changed.
 - `-screen-fullscreen 0`: Unity's own option. Starts the game windowed even if it was fullscreen last time, before the mod has loaded.
 - `--wallpaper-region`: Rain World region codes such as `SU`, `HI`, `CC`, `GW`, `SH`, `DS`, `SL`, `SI`, `LF`, `UW`, `SS`, `SB`, `LM`, `RM`, `DM`, `LC`, `MS`, `VS`, `CL`, `OE`
 - `--wallpaper-campaign`: `White`, `Yellow`, `Red`, `Gourmand`, `Artificer`, `Rivulet`, `Spearmaster`, `Saint`, `Watcher`
@@ -72,7 +71,8 @@ The Microsoft Store edition of Lively does not support application wallpapers.
 
 Behavior:
 
-- Region, campaign, menu style and mute apply to that process only and do not change your Remix or game settings.
+- Region, campaign and menu style apply to that process only and do not change your Remix settings.
+- Everything else comes from the mod's Remix settings, which a wallpaper launch reads like any other. The wallpaper plays the game's music and sounds; for a silent one, turn off **Game sound** in Remix (Display card).
 - The campaign override covers the whole session (region tour, HUD names, Watcher world states) until you pick another campaign in the settings menu or the tour advances to the next campaign.
 - Auto-launch is one-shot per process, so returning to the main menu does not immediately restart wallpaper mode.
 

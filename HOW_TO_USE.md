@@ -82,8 +82,9 @@ The top of the menu shows the rain state ("Rain in 2m 31s", "Waiting for the rai
 
 - Always show HUD
 - No Rain Wait
+- Game sound: the game's music and sounds while wallpaper mode runs. Turned off, the wallpaper is silent; the main menu and normal play keep their sound either way.
 
-Campaign, region, room and camera mode are applied when you press `TRAVEL`. Watcher world, room lock, always show HUD and No Rain Wait apply immediately. Creature changes fully take effect on the next region load.
+Campaign, region, room and camera mode are applied when you press `TRAVEL`. Watcher world, room lock, always show HUD, No Rain Wait and Game sound apply immediately. Creature changes fully take effect on the next region load.
 
 ## Watcher World States
 

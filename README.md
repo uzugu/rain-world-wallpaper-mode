@@ -41,7 +41,6 @@ Notes:
 
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
 - `--wallpaper-host` does the same for a wallpaper host such as Wallpaper Engine or Lively that launches `RainWorld.exe` as a desktop wallpaper: the game keeps running without focus, stays windowed, and hides the BepInEx console. A Steam launch (`steam.exe -applaunch`) cannot be used for this.
-- `--wallpaper-mute` silences the game for that launch only.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
 - `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the settings menu or the tour moves on to the next campaign.
 - `--wallpaper-menu-style <panel|minimal>` picks the settings menu style for that launch only, instead of the Remix **Menu style** setting.
@@ -143,10 +142,10 @@ The project packages the DLL and `assets/` into:
 
 The Remix page groups the settings into cards with the same headings as the in-game settings menu. Hover over a setting to read what it does and its range.
 
-- **Travel**: campaign, start region, camera mode, and the Watcher world state (natural mix, clean, rotted, karma flowers, or Rot + Karma)
+- **Travel**: campaign, start region, camera mode, the Watcher world state (natural mix, clean, rotted, karma flowers, or Rot + Karma), and skipping the rain
 - **Creatures**: chaos creatures, chaos level, and spawning every creature type (experimental)
-- **Timing**: room stay, transition length, the shortest and longest time the rain plays before the region changes, and skipping the rain
-- **Display**: always-show HUD, HUD fade delay, and the settings menu style
+- **Timing**: room stay, transition length, and the shortest and longest time the rain plays before the region changes
+- **Display**: always-show HUD, HUD fade delay, the settings menu style, and game sound (music and sounds on or off in wallpaper mode)
 
 A **Controls** card at the bottom lists the in-game keys and controller buttons.
 
@@ -165,6 +164,7 @@ Both styles hold the same settings and expose the live wallpaper session:
 - chaos toggles and chaos level
 - always-show HUD
 - no-rain-wait toggle
+- game sound toggle
 
 `TRAVEL` applies the travel choices and closes the menu, `CLOSE` closes it without applying them, `F1` / `Tab` toggles it and `Escape` closes it. In the minimal style these are the **Travel** and **Close** rows at the bottom of the list.
 

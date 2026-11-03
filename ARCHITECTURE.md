@@ -38,6 +38,10 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - turns on `Application.runInBackground`, hides the BepInEx console window, and keeps the game windowed
   - hooks `Options.OnLoadFinished`, where Rain World applies its saved resolution and fullscreen setting: once a host has embedded the game window (class `UnityWndClass`), the window is left alone and only Futile's render width is set; before that, the original runs forced windowed. The saved options are not changed
 
+- `WallpaperSound.cs`
+  - the Game sound setting: with it off, a wallpaper session sets the master volume (`AudioListener.volume`, through Futile's `FSoundManager.volume`) to zero
+  - applied when each wallpaper session starts and from the settings menu toggles, and undone when the main menu opens; the game never sets or saves the master volume itself
+
 - `WallpaperController.cs`
   - central runtime coordinator
   - owns the active room/region state
