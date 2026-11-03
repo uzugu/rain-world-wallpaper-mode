@@ -138,14 +138,17 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
-        /// Enable chaos mode with specified level (1-10)
+        /// Enable chaos mode with specified level (1-10, out-of-range values are clamped)
         /// </summary>
         public void EnableChaos(int level)
         {
+            // Clamp instead of rejecting: WallpaperController retries EnableChaos every tick while IsEnabled is false,
+            // so rejecting a bad saved level would warn on every tick and chaos would never start
             if (level < 1 || level > 10)
             {
-                WallpaperMod.Log?.LogWarning($"ChaosManager: Invalid chaos level {level}, must be 1-10");
-                return;
+                int clampedLevel = Mathf.Clamp(level, 1, 10);
+                WallpaperMod.Log?.LogWarning($"ChaosManager: Chaos level {level} is outside 1-10, using {clampedLevel}");
+                level = clampedLevel;
             }
 
             chaosLevel = level;
