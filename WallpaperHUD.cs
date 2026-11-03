@@ -90,21 +90,9 @@ namespace RainWorldWallpaperMod
 
         private FLabel CreateLabel(float x, float y, string text)
         {
-            // Try to use the display font, fallback to font if not available
-            string fontName = "DisplayFont";
-            try
-            {
-                if (Futile.atlasManager.GetAtlasWithName("font") != null)
-                {
-                    fontName = "font";
-                }
-            }
-            catch
-            {
-                // If font check fails, use DisplayFont
-            }
-
-            return new FLabel(fontName, text)
+            // Region names come from the game in its current language, so use the game's font for that language
+            // (Japanese, Korean, Chinese, Russian and Thai need their own atlases); English still gets "font".
+            return new FLabel(RWCustom.Custom.GetFont(), text)
             {
                 x = x,
                 y = y,
