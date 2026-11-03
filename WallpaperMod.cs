@@ -111,6 +111,12 @@ namespace RainWorldWallpaperMod
             return true;
         }
 
+        /// <summary>
+        /// Settings menu layout picked with --wallpaper-menu-style ("panel", "minimal" or "floating"); null means the panel.
+        /// The styles are prototypes being compared.
+        /// </summary>
+        internal string MenuStyle { get; private set; }
+
         private void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
             orig(self);
@@ -685,12 +691,22 @@ namespace RainWorldWallpaperMod
                     case "--wallpaper-open-settings":
                         openSettingsOnLaunchRequested = true;
                         break;
+
+                    // Picks which prototype layout the settings menu uses; it does not start a session either.
+                    case "--wallpaper-menu-style":
+                        MenuStyle = (inlineValue ?? TryReadArgumentValue(args, ref i))?.Trim().ToLowerInvariant();
+                        break;
                 }
             }
 
             if (openSettingsOnLaunchRequested)
             {
                 Log?.LogInfo("The settings menu will open when the first wallpaper session is ready (--wallpaper-open-settings)");
+            }
+
+            if (!string.IsNullOrEmpty(MenuStyle))
+            {
+                Log?.LogInfo($"Settings menu style: {MenuStyle} (--wallpaper-menu-style)");
             }
 
             if (!autoLaunchWallpaperRequested)

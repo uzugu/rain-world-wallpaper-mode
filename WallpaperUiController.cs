@@ -5,7 +5,7 @@ namespace RainWorldWallpaperMod
     internal sealed class WallpaperUiController
     {
         private WallpaperHUD hud;
-        private WallpaperSettingsMenu settingsMenu;
+        private global::Menu.Menu settingsMenu;
         private bool hasInitializedHud;
 
         public WallpaperHUD Hud => hud;
@@ -78,10 +78,10 @@ namespace RainWorldWallpaperMod
                 return;
             }
 
-            WallpaperSettingsMenu menu;
+            global::Menu.Menu menu;
             try
             {
-                menu = new WallpaperSettingsMenu(manager, controller, () => CloseSettingsMenu());
+                menu = CreateSettingsMenu(manager, controller);
                 manager.sideProcesses.Add(menu);
             }
             catch (Exception ex)
@@ -95,13 +95,28 @@ namespace RainWorldWallpaperMod
             hud?.RegisterUserActivity();
         }
 
+        // The layouts are prototypes being compared; --wallpaper-menu-style picks one, the panel is the default.
+        private global::Menu.Menu CreateSettingsMenu(ProcessManager manager, WallpaperController controller)
+        {
+            Action closeRequested = () => CloseSettingsMenu();
+            switch (WallpaperMod.Instance?.MenuStyle)
+            {
+                case "minimal":
+                    return new WallpaperMinimalMenu(manager, controller, closeRequested);
+                case "floating":
+                    return new WallpaperFloatingMenu(manager, controller, closeRequested);
+                default:
+                    return new WallpaperSettingsMenu(manager, controller, closeRequested);
+            }
+        }
+
         /// <summary>
         /// Stops the settings menu. Side processes outlive the game they were started from, so every path that ends or
         /// reloads the wallpaper session has to come through here.
         /// </summary>
         public void CloseSettingsMenu(bool playSound = true)
         {
-            WallpaperSettingsMenu menu = settingsMenu;
+            global::Menu.Menu menu = settingsMenu;
             if (menu == null)
             {
                 return;
