@@ -159,6 +159,14 @@ namespace RainWorldWallpaperMod
             MenuStyleConfig = config.Bind("menuStyle", MenuStyle.Panel.ToString());
         }
 
+        // Layout of the Remix page. Remix gives every tab a 600 x 600 canvas with (0, 0) at its bottom left corner.
+        private const float CanvasSize = 600f;
+        private const float PageMargin = 10f;
+        private const float ColumnGap = 10f;
+        private const float CardGap = 8f;
+        private const float CardWidth = (CanvasSize - 2f * PageMargin - ColumnGap) / 2f;
+        private const float CardsTop = 520f;
+
         public override void Initialize()
         {
             base.Initialize();
@@ -168,204 +176,275 @@ namespace RainWorldWallpaperMod
                 var opTab = new OpTab(this, "Settings");
                 Tabs = new[] { opTab };
 
-                // Two-column layout with increased spacing
-                float leftColumnLabel = 50f;
-                float leftColumnControl = 150f;
-                float rightColumnLabel = 350f;
-                float rightColumnControl = 450f;
-                float yPos = 550f;
-                float lineHeight = 60f;
+                var page = new RemixPage();
+                float leftColumn = PageMargin;
+                float rightColumn = PageMargin + CardWidth + ColumnGap;
 
-                // Create all UI elements first, add dropdowns last for proper z-ordering
-                var uiElements = new List<UIelement>();
+                page.AddCenteredText("WALLPAPER MODE", 560f, 30f, bigText: true, RemixPage.White);
+                page.AddCenteredText("Hover over a setting to see what it does.", 532f, 20f, bigText: false, RemixPage.DarkGrey);
 
-                // Title (full width)
-                uiElements.Add(new OpLabel(leftColumnLabel, yPos, "Wallpaper Mode Settings", bigText: true));
-                yPos -= lineHeight * 1.2f;
+                // The cards follow the sections of the in-game settings menu, so a setting sits under the same heading in
+                // both places; TIMING holds the durations that only Remix sets. Both columns end at the same height, and
+                // the controls card spans the page below them.
+                float top = CardsTop;
+                page.BeginCard("TRAVEL", leftColumn, top, CardWidth, RemixPage.CardHeight(4));
+                page.AddDropdown("Campaign", SelectedCampaign, GetEnumItems(typeof(CampaignChoice), GetCampaignDisplayName),
+                    "Which slugcat campaign the wallpaper tours. It decides which regions are visited and what they are called.");
+                page.AddDropdown("Start region", StartRegion, GetRegionItems(),
+                    "The region the wallpaper starts in. A Watcher region switches to the Watcher campaign; a region the campaign cannot reach falls back to its usual start.");
+                page.AddDropdown("Camera", CameraModeConfig, GetEnumItems(typeof(CameraMode), GetCameraModeDisplayName),
+                    "How the camera picks views in rooms with several screens: a random tour, one random view, every view in order, or the first view only.");
+                page.AddDropdown("Watcher world", RotStateConfig, GetEnumItems(typeof(RotState), GetRotStateDisplayName),
+                    "Watcher campaign only: the state of the world, from a natural mix to clean, rotted, karma flowers, or rot and flowers together.");
 
-                // === LEFT COLUMN ===
-                float leftYPos = yPos;
+                top -= RemixPage.CardHeight(4) + CardGap;
+                page.BeginCard("CREATURES", leftColumn, top, CardWidth, RemixPage.CardHeight(4));
+                page.AddCheckBox("Chaos creatures", EnableChaos,
+                    "Spawn extra creatures into the rooms the camera visits.");
+                page.AddNumber("Chaos level", ChaosLevel,
+                    $"How many creatures appear and how quickly ({ChaosLevelRangeMin}-{ChaosLevelRangeMax}): level 1 keeps up to 5 at once, level 10 up to 150.");
+                page.AddCheckBox("Every creature (experimental)", ChaosSpawnAll,
+                    "Experimental: also spawn creature types that are normally left out. May crash the game.");
+                page.AddNote("Levels above 7 may lag or crash.");
 
-                // Campaign Selection label (dropdown added later)
-                float campaignYPos = leftYPos;
-                uiElements.Add(new OpLabel(leftColumnLabel, campaignYPos, "Campaign:"));
-                leftYPos -= lineHeight;
+                top = CardsTop;
+                page.BeginCard("TIMING", rightColumn, top, CardWidth, RemixPage.CardHeight(5));
+                page.AddNumber("Room stay (sec)", StayDuration,
+                    $"How long the camera stays in each room before moving on ({StayDurationRangeMin}-{StayDurationRangeMax} seconds).");
+                page.AddNumber("Transition (sec)", TransitionDuration,
+                    $"How long the move from one room to the next takes ({TransitionDurationRangeMin}-{TransitionDurationRangeMax} seconds).");
+                page.AddNumber("Rain time min (sec)", RainCountdownMin,
+                    $"When a cycle ends, the rain plays for a random time between the two rain times, then the region changes. Shortest time ({RainCountdownMinRangeMin}-{RainCountdownMinRangeMax} seconds).");
+                page.AddNumber("Rain time max (sec)", RainCountdownMax,
+                    $"Longest time the rain plays before the region changes ({RainCountdownMaxRangeMin}-{RainCountdownMaxRangeMax} seconds).");
+                page.AddCheckBox("Skip the rain", NoRainTransition,
+                    "Change region at 95% of the cycle instead of waiting for the rain.");
 
-                // Room Stay Duration
-                // Numeric settings use OpUpdown: it takes its bounds from the configurable's acceptable range,
-                // while OpTextBox accepts any number and only gets clamped when the config is saved
-                OpUpdown stayDurationBox = new OpUpdown(StayDuration, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                stayDurationBox.description = $"Duration in seconds to stay in each room before transitioning ({StayDurationRangeMin}-{StayDurationRangeMax})";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Room (sec):"));
-                uiElements.Add(stayDurationBox);
-                leftYPos -= lineHeight;
+                top -= RemixPage.CardHeight(5) + CardGap;
+                page.BeginCard("DISPLAY", rightColumn, top, CardWidth, RemixPage.CardHeight(3));
+                page.AddCheckBox("Always show HUD", AlwaysShowHud,
+                    "Keep the HUD on screen instead of fading it out. H switches this in-game.");
+                page.AddNumber("HUD fade (sec)", HudFadeDelay,
+                    $"How long the HUD stays after the last input before it fades out ({HudFadeDelayRangeMin}-{HudFadeDelayRangeMax} seconds).");
+                page.AddDropdown("Menu style", MenuStyleConfig, GetEnumItems(typeof(MenuStyle), GetMenuStyleDisplayName),
+                    "Look of the in-game settings menu (F1 / Tab): Panel, a framed panel with arrows and checkboxes, or Minimal, a plain text list.");
 
-                // Always Show HUD
-                OpCheckBox alwaysShowHudBox = new OpCheckBox(AlwaysShowHud, new Vector2(leftColumnControl, leftYPos));
-                alwaysShowHudBox.description = "If enabled, the HUD will always be visible and won't fade out";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos + 2f, "Always HUD:"));
-                uiElements.Add(alwaysShowHudBox);
-                leftYPos -= lineHeight;
-
-                // Camera Mode label (dropdown added later)
-                float cameraModeYPos = leftYPos;
-                uiElements.Add(new OpLabel(leftColumnLabel, cameraModeYPos, "Camera Mode:"));
-                leftYPos -= lineHeight;
-
-                // Rain Countdown Min
-                OpUpdown rainCountdownMinBox = new OpUpdown(RainCountdownMin, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMinBox.description = $"Minimum seconds for rain countdown before region change ({RainCountdownMinRangeMin}-{RainCountdownMinRangeMax})";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Min (sec):"));
-                uiElements.Add(rainCountdownMinBox);
-                leftYPos -= lineHeight;
-
-                // Rain Countdown Max
-                OpUpdown rainCountdownMaxBox = new OpUpdown(RainCountdownMax, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMaxBox.description = $"Maximum seconds for rain countdown before region change ({RainCountdownMaxRangeMin}-{RainCountdownMaxRangeMax})";
-                uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Max (sec):"));
-                uiElements.Add(rainCountdownMaxBox);
-                leftYPos -= lineHeight;
-
-                // Menu Style label (dropdown added later)
-                float menuStyleYPos = leftYPos;
-                uiElements.Add(new OpLabel(leftColumnLabel, menuStyleYPos, "Menu Style:"));
-
-                // === RIGHT COLUMN ===
-                float rightYPos = yPos;
-
-                // Start Region Selection label (dropdown added later)
-                float regionYPos = rightYPos;
-                uiElements.Add(new OpLabel(rightColumnLabel, regionYPos, "Start Region:"));
-                rightYPos -= lineHeight;
-
-                // Transition Duration
-                OpUpdown transitionDurationBox = new OpUpdown(TransitionDuration, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                transitionDurationBox.description = $"Duration in seconds for camera transitions between rooms ({TransitionDurationRangeMin}-{TransitionDurationRangeMax})";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Transition (sec):"));
-                uiElements.Add(transitionDurationBox);
-                rightYPos -= lineHeight;
-
-                // HUD Fade Delay
-                OpUpdown hudFadeDelayBox = new OpUpdown(HudFadeDelay, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                hudFadeDelayBox.description = $"Delay in seconds before HUD fades out ({HudFadeDelayRangeMin}-{HudFadeDelayRangeMax})";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "HUD Fade (sec):"));
-                uiElements.Add(hudFadeDelayBox);
-                rightYPos -= lineHeight;
-
-                // Watcher State label (dropdown added later)
-                float rotStateYPos = rightYPos;
-                uiElements.Add(new OpLabel(rightColumnLabel, rotStateYPos, "Watcher State:"));
-                rightYPos -= lineHeight;
-
-                // Enable Chaos
-                OpCheckBox enableChaosBox = new OpCheckBox(EnableChaos, new Vector2(rightColumnControl, rightYPos));
-                enableChaosBox.description = "If enabled, spawns creatures to create a more lively environment (may cause instability)";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "Chaos Mode:"));
-                uiElements.Add(enableChaosBox);
-                rightYPos -= lineHeight;
-
-                // Chaos Level
-                OpUpdown chaosLevelBox = new OpUpdown(ChaosLevel, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                chaosLevelBox.description = "Chaos intensity: 1 = Minimal (5 creatures max), 10 = ABSOLUTE CHAOS (150 creatures max)";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Chaos Level:"));
-                uiElements.Add(chaosLevelBox);
-                rightYPos -= lineHeight;
-
-                // Chaos Spawn All
-                OpCheckBox chaosSpawnAllBox = new OpCheckBox(ChaosSpawnAll, new Vector2(rightColumnControl, rightYPos));
-                chaosSpawnAllBox.description = "⚠️ EXPERIMENTAL: Spawn ALL creature types, ignoring blacklist (may crash!)";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "Spawn All:"));
-                uiElements.Add(chaosSpawnAllBox);
-                rightYPos -= lineHeight;
-
-                // No Rain Transition
-                OpCheckBox noRainTransitionBox = new OpCheckBox(NoRainTransition, new Vector2(rightColumnControl, rightYPos));
-                noRainTransitionBox.description = "Skip the rain countdown and transition to next region immediately at 95% cycle completion";
-                uiElements.Add(new OpLabel(rightColumnLabel, rightYPos + 2f, "No Rain Wait:"));
-                uiElements.Add(noRainTransitionBox);
-
-                // === BOTTOM SECTION (full width) ===
-                float bottomYPos = Mathf.Min(leftYPos, rightYPos) - lineHeight * 0.5f;
-
-                // Control hints
-                uiElements.Add(new OpLabel(leftColumnLabel, bottomYPos, "In-game controls: F1/Tab opens the settings menu.", bigText: false)
+                // The keys that work while the wallpaper runs, as two tables side by side.
+                top -= RemixPage.CardHeight(3) + CardGap;
+                float controlsWidth = CanvasSize - 2f * PageMargin;
+                page.BeginCard("CONTROLS", leftColumn, top, controlsWidth, top - PageMargin, RemixPage.KeyRowPitch);
+                float tableWidth = (controlsWidth - 2f * RemixPage.CardPadding) / 2f;
+                page.AddKeyTable(leftColumn + RemixPage.CardPadding, new[]
                 {
-                    color = new Color(0.7f, 0.85f, 1f, 0.85f)
+                    new[] { "", "Keyboard", "Controller" },
+                    new[] { "Settings menu", "F1 / Tab", "Start" },
+                    new[] { "Change room", "Left / Right", "Stick" },
+                    new[] { "Camera position", "Up / Down", "Stick" },
+                    new[] { "Next room", "N", "A" },
+                });
+                page.AddKeyTable(leftColumn + RemixPage.CardPadding + tableWidth, new[]
+                {
+                    new[] { "", "Keyboard", "Controller" },
+                    new[] { "Change region", "B / G", "LB / RB" },
+                    new[] { "Lock the room", "L", "X" },
+                    new[] { "HUD always on", "H", "Y" },
+                    new[] { "Main menu", "Esc", "Back" },
                 });
 
-                // Add all non-dropdown elements first
-                opTab.AddItems(uiElements.ToArray());
-
-                // Create and add dropdowns LAST for proper z-ordering (render on top)
-                var campaignDropdown = new OpComboBox(
-                    SelectedCampaign,
-                    new Vector2(leftColumnControl, campaignYPos - 5f),
-                    140f,
-                    OpResourceSelector.GetEnumNames(null, typeof(CampaignChoice)).Select(li =>
-                    {
-                        li.displayName = GetCampaignDisplayName(li.name);
-                        return li;
-                    }).ToList()
-                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                campaignDropdown.description = "Choose which slugcat campaign to explore";
-
-                var regionDropdown = new OpComboBox(
-                    StartRegion,
-                    new Vector2(rightColumnControl, regionYPos - 5f),
-                    140f,
-                    WallpaperRegionCatalog.GetAllSelectableRegions()
-                        .Select((regionCode, index) => new ListItem(regionCode, index)
-                        {
-                            displayName = GetRegionDisplayName(regionCode)
-                        })
-                        .ToList()
-                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                regionDropdown.description = "Choose a starting region available to at least one installed campaign";
-
-                var cameraModeDropdown = new OpComboBox(
-                    CameraModeConfig,
-                    new Vector2(leftColumnControl, cameraModeYPos - 5f),
-                    140f,
-                    OpResourceSelector.GetEnumNames(null, typeof(CameraMode)).Select(li =>
-                    {
-                        li.displayName = GetCameraModeDisplayName(li.name);
-                        return li;
-                    }).ToList()
-                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                cameraModeDropdown.description = "How to select camera positions in large rooms";
-
-                var rotStateDropdown = new OpComboBox(
-                    RotStateConfig,
-                    new Vector2(rightColumnControl, rotStateYPos - 5f),
-                    140f,
-                    OpResourceSelector.GetEnumNames(null, typeof(RotState)).Select(li =>
-                    {
-                        li.displayName = GetRotStateDisplayName(li.name);
-                        return li;
-                    }).ToList()
-                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                rotStateDropdown.description = "Watcher environmental state: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma";
-
-                var menuStyleDropdown = new OpComboBox(
-                    MenuStyleConfig,
-                    new Vector2(leftColumnControl, menuStyleYPos - 5f),
-                    140f,
-                    OpResourceSelector.GetEnumNames(null, typeof(MenuStyle)).Select(li =>
-                    {
-                        li.displayName = GetMenuStyleDisplayName(li.name);
-                        return li;
-                    }).ToList()
-                ) { colorEdge = Menu.MenuColorEffect.rgbWhite };
-                menuStyleDropdown.description = "Look of the in-game settings menu: a framed panel, or a minimal text list";
-
-                // Add dropdowns last to ensure they render on top
-                opTab.AddItems(new UIelement[] { campaignDropdown, regionDropdown, cameraModeDropdown, rotStateDropdown, menuStyleDropdown });
-
+                page.AddTo(opTab);
                 WallpaperMod.Log?.LogInfo("WallpaperModOptions: UI initialized successfully");
             }
             catch (Exception ex)
             {
                 WallpaperMod.Log?.LogError($"WallpaperModOptions: Failed to initialize UI - {ex}");
+            }
+        }
+
+        private static List<ListItem> GetEnumItems(Type enumType, Func<string, string> displayName)
+        {
+            return OpResourceSelector.GetEnumNames(null, enumType).Select(item =>
+            {
+                item.displayName = displayName(item.name);
+                return item;
+            }).ToList();
+        }
+
+        private List<ListItem> GetRegionItems()
+        {
+            return WallpaperRegionCatalog.GetAllSelectableRegions()
+                .Select((regionCode, index) => new ListItem(regionCode, index)
+                {
+                    displayName = GetRegionDisplayName(regionCode)
+                })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Lays out the Remix page as cards: a header, then one setting per row, with the label on the left and the
+        /// control against the right edge of the card. Elements are collected in three layers and added to the tab in
+        /// that order, because Remix draws later items on top: card backgrounds, then labels and simple controls, then
+        /// dropdowns.
+        /// </summary>
+        private sealed class RemixPage
+        {
+            public const float CardPadding = 12f;
+            public const float KeyRowPitch = 26f;
+            private const float RowPitch = 32f;
+            private const float CardHeaderHeight = 30f;
+            private const float CardBottomPadding = 6f;
+            private const float LabelGap = 8f;
+            private const float DropdownWidth = 150f;
+            private const float NumberWidth = 80f;
+            private const float CheckBoxSize = 24f;
+            private const float KeyActionWidth = 108f;
+            private const float KeyColumnWidth = 92f;
+            private const float KeyButtonWidth = 70f;
+
+            private readonly List<UIelement> backgrounds = new List<UIelement>();
+            private readonly List<UIelement> items = new List<UIelement>();
+            private readonly List<UIelement> dropdowns = new List<UIelement>();
+
+            private float contentLeft;
+            private float contentRight;
+            private float rowPitch;
+            private float firstRowCenter;
+            private float nextRowCenter;
+
+            public static Color White => global::Menu.MenuColorEffect.rgbWhite;
+            public static Color MediumGrey => global::Menu.MenuColorEffect.rgbMediumGrey;
+            public static Color DarkGrey => global::Menu.MenuColorEffect.rgbDarkGrey;
+
+            /// <summary>
+            /// Height of a card that holds the given number of setting rows.
+            /// </summary>
+            public static float CardHeight(int rows)
+            {
+                return CardHeaderHeight + rows * RowPitch + CardBottomPadding;
+            }
+
+            public void AddCenteredText(string text, float bottom, float height, bool bigText, Color color)
+            {
+                items.Add(new OpLabel(new Vector2(PageMargin, bottom), new Vector2(CanvasSize - 2f * PageMargin, height), text, FLabelAlignment.Center, bigText)
+                {
+                    color = color
+                });
+            }
+
+            /// <summary>
+            /// Starts a card whose top left corner is at (left, top). The rows added next fill it from under its header.
+            /// </summary>
+            public void BeginCard(string title, float left, float top, float width, float height, float pitch = RowPitch)
+            {
+                backgrounds.Add(new OpRect(new Vector2(left, top - height), new Vector2(width, height)));
+
+                contentLeft = left + CardPadding;
+                contentRight = left + width - CardPadding;
+                rowPitch = pitch;
+                firstRowCenter = top - CardHeaderHeight - pitch / 2f;
+                nextRowCenter = firstRowCenter;
+
+                AddText(title, contentLeft, top - CardHeaderHeight / 2f, contentRight - contentLeft, White);
+            }
+
+            public void AddDropdown(string label, Configurable<string> config, List<ListItem> choices, string description)
+            {
+                float centerY = TakeRow(label, DropdownWidth);
+                var dropdown = new OpComboBox(config, new Vector2(contentRight - DropdownWidth, centerY - 12f), DropdownWidth, choices)
+                {
+                    description = description
+                };
+
+                // Remix draws an open list inside the dropdown's own container, under anything added after it, so the
+                // dropdown moves itself to the front whenever its list opens over the rows below.
+                dropdown.OnListOpen += _ => dropdown.MoveToFront();
+                dropdowns.Add(dropdown);
+            }
+
+            // Numbers use OpUpdown: it takes its bounds from the configurable's acceptable range, while OpTextBox accepts
+            // any number and only gets clamped when the config is saved.
+            public void AddNumber(string label, Configurable<float> config, string description)
+            {
+                float centerY = TakeRow(label, NumberWidth);
+                items.Add(new OpUpdown(config, new Vector2(contentRight - NumberWidth, centerY - 15f), NumberWidth)
+                {
+                    description = description
+                });
+            }
+
+            public void AddNumber(string label, Configurable<int> config, string description)
+            {
+                float centerY = TakeRow(label, NumberWidth);
+                items.Add(new OpUpdown(config, new Vector2(contentRight - NumberWidth, centerY - 15f), NumberWidth)
+                {
+                    description = description
+                });
+            }
+
+            public void AddCheckBox(string label, Configurable<bool> config, string description)
+            {
+                float centerY = TakeRow(label, CheckBoxSize);
+                items.Add(new OpCheckBox(config, new Vector2(contentRight - CheckBoxSize, centerY - CheckBoxSize / 2f))
+                {
+                    description = description
+                });
+            }
+
+            public void AddNote(string text)
+            {
+                AddText(text, contentLeft, TakeRow(), contentRight - contentLeft, DarkGrey);
+            }
+
+            /// <summary>
+            /// Writes a table of controls from the card's first row down. Each row is { what it does, keyboard keys,
+            /// controller buttons }, and the first row holds the column headings.
+            /// </summary>
+            public void AddKeyTable(float left, string[][] rows)
+            {
+                float centerY = firstRowCenter;
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    bool heading = i == 0;
+                    AddText(rows[i][0], left, centerY, KeyActionWidth, heading ? DarkGrey : MediumGrey);
+                    AddText(rows[i][1], left + KeyActionWidth, centerY, KeyColumnWidth, heading ? DarkGrey : White);
+                    AddText(rows[i][2], left + KeyActionWidth + KeyColumnWidth, centerY, KeyButtonWidth, heading ? DarkGrey : White);
+                    centerY -= rowPitch;
+                }
+            }
+
+            public void AddTo(OpTab tab)
+            {
+                tab.AddItems(backgrounds.ToArray());
+                tab.AddItems(items.ToArray());
+                tab.AddItems(dropdowns.ToArray());
+            }
+
+            // Takes the next row of the card and writes its label, leaving room for a control of the given width at the
+            // right edge. Returns the row's vertical centre.
+            private float TakeRow(string label, float controlWidth)
+            {
+                float centerY = TakeRow();
+                AddText(label, contentLeft, centerY, contentRight - controlWidth - LabelGap - contentLeft, MediumGrey);
+                return centerY;
+            }
+
+            private float TakeRow()
+            {
+                float centerY = nextRowCenter;
+                nextRowCenter -= rowPitch;
+                return centerY;
+            }
+
+            private void AddText(string text, float left, float centerY, float width, Color color)
+            {
+                if (string.IsNullOrEmpty(text))
+                {
+                    return;
+                }
+
+                items.Add(new OpLabel(new Vector2(left, centerY - 10f), new Vector2(width, 20f), text, FLabelAlignment.Left)
+                {
+                    color = color
+                });
             }
         }
 
