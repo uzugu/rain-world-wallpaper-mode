@@ -10,7 +10,7 @@ Rain World Wallpaper Mode turns Rain World into a hands-free animated wallpaper.
 - Automatic room exploration with smooth eased camera transitions
 - Rain-cycle-driven region changes
 - Four camera modes for multi-camera rooms
-- In-game settings overlay and quick travel
+- In-game settings menu and quick travel
 - Auto-hiding or always-visible HUD
 - Optional chaos spawning with configurable intensity
 - Natural echo support with echo music handling
@@ -23,7 +23,7 @@ Rain World Wallpaper Mode turns Rain World into a hands-free animated wallpaper.
 1. Enable the mod in Remix.
 2. Return to the main menu.
 3. Click `WALLPAPER MODE`.
-4. Use `F1` or `Tab` for the in-game settings overlay.
+4. Use `F1` or `Tab` for the in-game settings menu.
 
 For the full control reference, see `HOW_TO_USE.md`.
 
@@ -41,7 +41,7 @@ Notes:
 
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
-- `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the overlay or the tour moves on to the next campaign.
+- `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the settings menu or the tour moves on to the next campaign.
 - The auto-launch is one-shot per process, so returning to the main menu does not immediately relaunch wallpaper mode.
 
 For setup details, see `WALLPAPER_ENGINE.md`.
@@ -59,8 +59,10 @@ For setup details, see `WALLPAPER_ENGINE.md`.
 | `B` | Previous region |
 | `L` | Toggle room lock |
 | `H` | Toggle HUD always visible |
-| `F1` / `Tab` | Toggle settings overlay |
-| `Escape` | Return to main menu |
+| `F1` / `Tab` | Open or close the settings menu |
+| `Escape` | Close the settings menu if it is open, otherwise return to the main menu |
+
+While the settings menu is open, only `F1` / `Tab` and `Escape` act as wallpaper keys. The arrow keys move through the menu instead, and the other keys above do nothing until it is closed.
 
 ## Camera Modes
 
@@ -152,18 +154,18 @@ The Remix UI exposes:
 - rain countdown min/max
 - Watcher world state: natural mix, clean, rotted, karma flowers, or Rot + Karma
 
-### In-Game Overlay
+### In-Game Settings Menu
 
-The overlay exposes the live wallpaper session:
+The settings menu is a panel built from Rain World's own menu controls. It works with the mouse, the arrow keys or a controller, and the wallpaper keeps running behind it. It exposes the live wallpaper session:
 
-- campaign quick travel
-- region quick travel
-- camera mode changes
+- campaign, region, room and camera mode quick travel, applied with the `TRAVEL` button
 - Watcher world-state changes
-- room quick travel
 - room lock
-- chaos toggles
+- chaos toggles and chaos level
+- always-show HUD
 - no-rain-wait toggle
+
+`TRAVEL` applies the travel choices and closes the menu, `CLOSE` closes it without applying them, `F1` / `Tab` toggles it and `Escape` closes it.
 
 ## Documentation
 

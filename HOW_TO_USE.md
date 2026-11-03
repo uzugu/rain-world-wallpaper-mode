@@ -41,34 +41,44 @@ Wallpaper mode uses the active region's rain cycle:
 | `B` | Force previous region |
 | `L` | Toggle room lock |
 | `H` | Toggle HUD always visible |
-| `F1` / `Tab` | Open or close the settings overlay |
-| `Escape` | Return to the main menu |
+| `F1` / `Tab` | Open or close the settings menu |
+| `Escape` | Close the settings menu if it is open, otherwise return to the main menu |
 
-### Settings Overlay
+### Settings Menu
 
-When the overlay is open:
+The settings menu is a panel on the left side of the screen. It is built from Rain World's own menu controls, so it behaves like the game's other menus, and the wallpaper keeps running on the right while it is open.
 
-- `Up Arrow` / `Down Arrow` changes the focused setting.
-- `Left Arrow` / `Right Arrow` cycles the selected value.
-- `Enter`, `Keypad Enter`, or `G` applies quick travel and closes the overlay.
-- `H` still toggles the HUD mode.
-- `F1` / `Tab` closes the overlay without applying new quick travel.
+- Move around with the mouse, the arrow keys or a controller (stick or d-pad), and press the selected control with the menu's confirm button. The menu's back button (usually `B` on a controller) jumps the selection to `CLOSE`.
+- Press the arrows on either side of a setting to cycle its value. Checkboxes toggle right away.
+- `TRAVEL` applies the selected campaign, region, room and camera mode, then closes the menu.
+- `CLOSE` closes the menu without applying them.
+- `F1` / `Tab` (`Start` on a controller) and `Escape` also close the menu. No other wallpaper key (room, camera, `N`, `G`, `B`, `L`, `H`) does anything while it is open.
 
-## Overlay Features
+## Settings Menu Features
 
-The in-game overlay exposes:
+The top of the panel shows the rain state ("Rain in 2m 31s", "Waiting for the rain (43%)" or, with No Rain Wait, "No Rain Wait: 43% / 95%") and how many of the campaign's regions have been visited.
 
-- campaign selection
-- region selection
-- camera mode selection
-- Watcher world-state selection: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma
-- room quick travel within the current region
-- room lock toggle
-- chaos mode toggle and level
-- spawn-all toggle
-- no-rain-wait toggle
+`TRAVEL`:
 
-Most changes apply immediately. Region-dependent changes fully take effect on the next region load.
+- Campaign
+- Region
+- Room: a room of the current region. While another region is selected its arrows are greyed out; press `TRAVEL` to go to that region, then open the menu again to pick a room there.
+- Camera: the camera mode
+- Watcher world: Natural Mix, Clean, Rotted, Karma Flowers, or Rot + Karma. Greyed out unless the Watcher campaign is selected.
+- Lock room
+
+`CREATURES`:
+
+- Chaos creatures toggle
+- Chaos level (1 to 10)
+- Spawn every creature (experimental)
+
+`DISPLAY`:
+
+- Always show HUD
+- No Rain Wait
+
+Campaign, region, room and camera mode are applied when you press `TRAVEL`. Watcher world, room lock, always show HUD and No Rain Wait apply immediately. Creature changes fully take effect on the next region load.
 
 ## Watcher World States
 
@@ -95,7 +105,7 @@ Chaos mode can populate rooms with creatures for a more active wallpaper:
 
 - level `1` through `10` controls spawn interval and creature cap
 - slugpups and scavengers are intentionally common
-- `Spawn All` bypasses the normal creature blacklist and is explicitly experimental
+- `Spawn All` (Spawn every creature in the settings menu) bypasses the normal creature blacklist and is explicitly experimental
 
 Chaos changes are safest to evaluate after a region reload.
 
