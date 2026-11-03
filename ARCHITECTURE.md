@@ -34,9 +34,12 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - keeps the pause button from opening the vanilla pause menu during wallpaper sessions
 
 - `WallpaperHostMode.cs`
-  - `--wallpaper-host` (alias `--wallpaper-engine`): the game is launched by a wallpaper host (Wallpaper Engine, Lively) that embeds its window as the desktop wallpaper
+  - the game is launched by a wallpaper host (Wallpaper Engine, Lively) that embeds its window as the desktop wallpaper: detected from the parent process (`wallpaper32/64.exe`, `ui32.exe`, `lively.exe`, `livelywpf.exe`, through a Toolhelp process snapshot), or asked for with `--wallpaper-host` (alias `--wallpaper-engine`). The launcher is logged on every start
   - turns on `Application.runInBackground`, hides the BepInEx console window, and keeps the game windowed
   - hooks `Options.OnLoadFinished`, where Rain World applies its saved resolution and fullscreen setting: once a host has embedded the game window (class `UnityWndClass`), the window is left alone and only Futile's render width is set; before that, the original runs forced windowed. The saved options are not changed
+
+- `WallpaperEngineSetup.cs`
+  - the Remix page's WALLPAPER ENGINE button: finds Wallpaper Engine through the Steam libraries (registry `SteamPath`, `libraryfolders.vdf`, the game's own library) and writes `projects\myprojects\rainworld_wallpaper_mode\project.json` (type `application`, pointing at the game's executable, UTF-8 without BOM) with the mod's thumbnail as `preview.png`
 
 - `WallpaperSound.cs`
   - the Game sound setting: with it off, a wallpaper session sets the master volume (`AudioListener.volume`, through Futile's `FSoundManager.volume`) to zero

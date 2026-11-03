@@ -2,16 +2,23 @@
 
 The mod can turn Rain World into a live desktop wallpaper through a wallpaper host such as Wallpaper Engine or the free Lively Wallpaper. The host starts the game, takes its window and puts it behind your desktop icons. The mod starts wallpaper mode by itself and makes the game behave like a wallpaper program.
 
+## Quick Setup With Wallpaper Engine
+
+1. Start Rain World normally, open **Remix**, and select **Rain World Wallpaper Mode** to open its settings.
+2. Click **WALLPAPER ENGINE** in the top right corner. The line under the title confirms that "Rain World Wallpaper Mode" was added to Wallpaper Engine.
+3. Close Rain World.
+4. In Wallpaper Engine, pick **Rain World Wallpaper Mode** (restart Wallpaper Engine if it is not listed yet). Wallpaper Engine asks once before it runs an application wallpaper.
+
+Rain World starts in the background, and the wallpaper tour begins once the game reaches its main menu, usually after half a minute. The wallpaper uses the mod's Remix settings.
+
 ## How It Works
 
-The host has to start `RainWorld.exe` itself, with the `--wallpaper-host` launch argument. With it, the mod:
+The host has to start `RainWorld.exe` itself. When the program that starts the game is Wallpaper Engine or Lively, the mod notices and runs as a hosted wallpaper. For other hosts, add the `--wallpaper-host` launch argument (or its alias `--wallpaper-engine`). As a hosted wallpaper, the mod:
 
 - starts wallpaper mode from the main menu without a click
 - keeps the game running when it does not have focus, which a wallpaper never has
 - hides the BepInEx console window, so the game shows a single window
 - keeps the game windowed, and leaves its window alone once the host has taken it
-
-`--wallpaper-engine` does the same as `--wallpaper-host`.
 
 ### Why A Steam Launch Does Not Work
 
@@ -23,14 +30,11 @@ The host has to start `RainWorld.exe` itself, with the `--wallpaper-host` launch
 2. Recommended: turn off the BepInEx console. In `Rain World\BepInEx\config\BepInEx.cfg`, under `[Logging.Console]`, set `Enabled = false`. The mod hides the console once it has loaded, but the console opens a few seconds earlier, and a host may take it instead of the game window.
 3. Find your Rain World folder: in Steam, right-click Rain World, then Manage > Browse local files.
 
-## Wallpaper Engine
+## Wallpaper Engine By Hand
 
-1. In the Rain World folder, right-click `RainWorld.exe` and create a shortcut to it.
-2. Open the shortcut's Properties and set:
-   - Target: `"<Rain World folder>\RainWorld.exe" --wallpaper-host -screen-fullscreen 0`
-   - Start in: `"<Rain World folder>"`
-3. In Wallpaper Engine, choose **Create Wallpaper** and pick the shortcut, so the arguments come along. This makes an application wallpaper; application wallpapers stay on your PC and cannot be shared on the Workshop.
-4. Select the new wallpaper. Rain World starts in the background and the wallpaper tour begins once the game reaches its main menu, usually after half a minute.
+The Remix button above does this for you. To set it up yourself instead, choose **Create Wallpaper** in Wallpaper Engine and pick `RainWorld.exe` from the Rain World folder. No launch arguments are needed. This makes an application wallpaper; application wallpapers stay on your PC and cannot be shared on the Workshop.
+
+If Rain World was last run fullscreen, set it to windowed in the game's options first, or point Wallpaper Engine at a shortcut whose target adds `-screen-fullscreen 0`.
 
 Wallpaper Engine's own settings (Performance) decide whether the wallpaper pauses or stops while another program is fullscreen.
 
@@ -54,6 +58,8 @@ Lively has no field for launch arguments, so the wallpaper is described in a `Li
 
 2. Zip the folder so `LivelyInfo.json` sits at the top of the zip, and drag the zip into Lively's library.
 
+The mod also recognises Lively as the program that starts it; the arguments make sure of it and keep the game windowed from the first frame.
+
 The Microsoft Store edition of Lively does not support application wallpapers.
 
 ## Launch Arguments
@@ -62,7 +68,7 @@ The Microsoft Store edition of Lively does not support application wallpapers.
 --wallpaper-host -screen-fullscreen 0 --wallpaper-region SU --wallpaper-campaign White
 ```
 
-- `--wallpaper-host` (or `--wallpaper-engine`): run as a hosted desktop wallpaper, as described above. Starts wallpaper mode.
+- `--wallpaper-host` (or `--wallpaper-engine`): run as a hosted desktop wallpaper, as described above. Starts wallpaper mode. Not needed when Wallpaper Engine or Lively starts the game.
 - `--wallpaper`: only start wallpaper mode without a click, for example to run it in a normal window on a second monitor.
 - `-screen-fullscreen 0`: Unity's own option. Starts the game windowed even if it was fullscreen last time, before the mod has loaded.
 - `--wallpaper-region`: Rain World region codes such as `SU`, `HI`, `CC`, `GW`, `SH`, `DS`, `SL`, `SI`, `LF`, `UW`, `SS`, `SB`, `LM`, `RM`, `DM`, `LC`, `MS`, `VS`, `CL`, `OE`

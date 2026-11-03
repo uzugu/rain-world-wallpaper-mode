@@ -40,7 +40,7 @@ Recommended launch arguments:
 Notes:
 
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
-- `--wallpaper-host` does the same for a wallpaper host such as Wallpaper Engine or Lively that launches `RainWorld.exe` as a desktop wallpaper: the game keeps running without focus, stays windowed, and hides the BepInEx console. A Steam launch (`steam.exe -applaunch`) cannot be used for this.
+- To make it your desktop wallpaper, click **WALLPAPER ENGINE** on the mod's Remix page and pick "Rain World Wallpaper Mode" in Wallpaper Engine. When Wallpaper Engine or Lively starts `RainWorld.exe`, the mod runs as a hosted wallpaper by itself: the game keeps running without focus, stays windowed, and hides the BepInEx console. `--wallpaper-host` does the same for other hosts. A Steam launch (`steam.exe -applaunch`) cannot be used for this.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
 - `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the settings menu or the tour moves on to the next campaign.
 - `--wallpaper-menu-style <panel|minimal>` picks the settings menu style for that launch only, instead of the Remix **Menu style** setting.
@@ -147,7 +147,7 @@ The Remix page groups the settings into cards with the same headings as the in-g
 - **Timing**: room stay, transition length, and the shortest and longest time the rain plays before the region changes
 - **Display**: always-show HUD, HUD fade delay, the settings menu style, and game sound (music and sounds on or off in wallpaper mode)
 
-A **Controls** card at the bottom lists the in-game keys and controller buttons.
+A **Controls** card at the bottom lists the in-game keys and controller buttons, and the **WALLPAPER ENGINE** button in the top right adds the wallpaper to Wallpaper Engine's library.
 
 ### In-Game Settings Menu
 
