@@ -67,13 +67,19 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - holds the quick-travel selection lists and applies travel (campaign, region, room, camera mode) from its `TRAVEL` button
   - exposes the Watcher world state, room lock, chaos, HUD, and rain settings
 
+- `WallpaperMinimalMenu.cs`, `WallpaperMinimalMenuParts.cs`
+  - the minimalistic style of the same menu: a text-only column of `MinimalRow`s over a soft shade (`MinimalShade`)
+  - every row is a `ButtonTemplate`, so the mouse, the arrow keys and controllers navigate it like any other game menu
+  - same settings, selection logic and travel behaviour as the panel
+
 - `WallpaperUiController.cs`
   - owns the HUD and the settings menu of one wallpaper session
   - opens the menu (creates it and adds it to `ProcessManager.sideProcesses`) and closes it (`StopSideProcess`)
+  - picks the menu style each time it opens the menu from `WallpaperMod.CurrentMenuStyle`: the `--wallpaper-menu-style` override, or else the Remix **Menu style** setting
   - stops the menu when the session reloads or shuts down, because side processes outlive the game process
 
 - `WallpaperModOptions.cs`
-  - Remix configuration UI
+  - Remix configuration UI, laid out by the nested `RemixPage` helper as cards (TRAVEL, CREATURES, TIMING, DISPLAY) that mirror the settings menu's sections, plus a CONTROLS card
   - binds persisted settings
   - defines campaign/camera/state choices and builds the region selector from installed campaign APIs
 
@@ -168,6 +174,12 @@ Cross-region travel is not a lightweight teleport. The mod prepares state for a 
 
   ```text
   --wallpaper --wallpaper-open-settings
+  ```
+
+- `--wallpaper-menu-style panel|minimal` overrides the Remix **Menu style** setting for that process, so both styles can be compared without touching the config. It does not start a session by itself either:
+
+  ```text
+  --wallpaper --wallpaper-open-settings --wallpaper-menu-style minimal
   ```
 
 ## Build and Packaging

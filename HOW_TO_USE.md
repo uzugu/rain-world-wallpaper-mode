@@ -46,17 +46,22 @@ Wallpaper mode uses the active region's rain cycle:
 
 ### Settings Menu
 
-The settings menu is a panel on the left side of the screen. It is built from Rain World's own menu controls, so it behaves like the game's other menus, and the wallpaper keeps running on the right while it is open.
+The settings menu sits on the left side of the screen. It is built from Rain World's own menu controls, so it behaves like the game's other menus, and the wallpaper keeps running on the right while it is open. It comes in two styles, chosen in Remix with **Display > Menu style**:
+
+- **Panel** (default): a framed panel with arrow buttons and checkboxes.
+- **Minimal**: a plain text list with each value beside its setting, over a soft shade.
+
+Both hold the same settings and are used the same way:
 
 - Move around with the mouse, the arrow keys or a controller (stick or d-pad), and press the selected control with the menu's confirm button. The menu's back button (usually `B` on a controller) jumps the selection to `CLOSE`.
-- Press the arrows on either side of a setting to cycle its value. Checkboxes toggle right away.
-- `TRAVEL` applies the selected campaign, region, room and camera mode, then closes the menu.
-- `CLOSE` closes the menu without applying them.
+- In the panel, press the arrows on either side of a setting to cycle its value; checkboxes toggle right away. In the minimal list, left and right change the selected setting, and confirm or a click steps it forward; On/Off settings flip right away.
+- `TRAVEL` (the **Travel** row in the minimal list) applies the selected campaign, region, room and camera mode, then closes the menu.
+- `CLOSE` (the **Close** row) closes the menu without applying them.
 - `F1` / `Tab` (`Start` on a controller) and `Escape` also close the menu. No other wallpaper key (room, camera, `N`, `G`, `B`, `L`, `H`) does anything while it is open.
 
 ## Settings Menu Features
 
-The top of the panel shows the rain state ("Rain in 2m 31s", "Waiting for the rain (43%)" or, with No Rain Wait, "No Rain Wait: 43% / 95%") and how many of the campaign's regions have been visited.
+The top of the menu shows the rain state ("Rain in 2m 31s", "Waiting for the rain (43%)" or, with No Rain Wait, "No Rain Wait: 43% / 95%") and how many of the campaign's regions have been visited.
 
 `TRAVEL`:
 

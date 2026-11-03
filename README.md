@@ -42,6 +42,7 @@ Notes:
 - `--wallpaper` boots straight into wallpaper mode with no menu click.
 - `--wallpaper-region <code>` overrides the starting region for that launch only.
 - `--wallpaper-campaign <name>` overrides the campaign for that launch only, including the region tour and HUD names, until you pick another campaign in the settings menu or the tour moves on to the next campaign.
+- `--wallpaper-menu-style <panel|minimal>` picks the settings menu style for that launch only, instead of the Remix **Menu style** setting.
 - The auto-launch is one-shot per process, so returning to the main menu does not immediately relaunch wallpaper mode.
 
 For setup details, see `WALLPAPER_ENGINE.md`.
@@ -138,25 +139,23 @@ The project packages the DLL and `assets/` into:
 
 ### Remix Options
 
-The Remix UI exposes:
+The Remix page groups the settings into cards with the same headings as the in-game settings menu. Hover over a setting to read what it does and its range.
 
-- campaign
-- start region
-- camera mode
-- room stay duration
-- transition duration
-- HUD fade delay
-- always-show HUD
-- chaos mode
-- chaos level
-- spawn all
-- no-rain-wait
-- rain countdown min/max
-- Watcher world state: natural mix, clean, rotted, karma flowers, or Rot + Karma
+- **Travel**: campaign, start region, camera mode, and the Watcher world state (natural mix, clean, rotted, karma flowers, or Rot + Karma)
+- **Creatures**: chaos creatures, chaos level, and spawning every creature type (experimental)
+- **Timing**: room stay, transition length, the shortest and longest time the rain plays before the region changes, and skipping the rain
+- **Display**: always-show HUD, HUD fade delay, and the settings menu style
+
+A **Controls** card at the bottom lists the in-game keys and controller buttons.
 
 ### In-Game Settings Menu
 
-The settings menu is a panel built from Rain World's own menu controls. It works with the mouse, the arrow keys or a controller, and the wallpaper keeps running behind it. It exposes the live wallpaper session:
+The settings menu is built from Rain World's own menu controls. It works with the mouse, the arrow keys or a controller, and the wallpaper keeps running behind it. The Remix **Menu style** setting picks how it looks:
+
+- **Panel** (default): a framed panel with arrow buttons and checkboxes
+- **Minimal**: a plain text list with each value beside its setting, over a soft shade
+
+Both styles hold the same settings and expose the live wallpaper session:
 
 - campaign, region, room and camera mode quick travel, applied with the `TRAVEL` button
 - Watcher world-state changes
@@ -165,7 +164,7 @@ The settings menu is a panel built from Rain World's own menu controls. It works
 - always-show HUD
 - no-rain-wait toggle
 
-`TRAVEL` applies the travel choices and closes the menu, `CLOSE` closes it without applying them, `F1` / `Tab` toggles it and `Escape` closes it.
+`TRAVEL` applies the travel choices and closes the menu, `CLOSE` closes it without applying them, `F1` / `Tab` toggles it and `Escape` closes it. In the minimal style these are the **Travel** and **Close** rows at the bottom of the list.
 
 ## Documentation
 
