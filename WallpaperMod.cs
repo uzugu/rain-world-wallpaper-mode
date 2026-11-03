@@ -164,13 +164,20 @@ namespace RainWorldWallpaperMod
 
         private void RainWorldGame_Update(On.RainWorldGame.orig_Update orig, RainWorldGame self)
         {
+            if (activeController != null && activeController.Game == self)
+            {
+                // The wallpaper uses the pause button for its own settings menu and for leaving, so the vanilla pause
+                // menu must not open from it.
+                MarkPauseButtonHeld(self);
+            }
+
             bool wasPaused = self.pauseMenu != null;
             orig(self);
 
             if (activeController != null && activeController.Game == self)
             {
-                // The pause button (Start on controllers, Escape on keyboard) also opens the wallpaper overlay or exits,
-                // so close the vanilla pause menu it just opened. A pause opened by the Steam overlay is left alone.
+                // Fallback for when the pause button could not be suppressed above: close the vanilla pause menu it just
+                // opened. A pause opened by the Steam overlay is left alone.
                 if (!wasPaused && self.pauseMenu != null && IsPauseButtonDown())
                 {
                     self.ContinuePaused();
@@ -179,6 +186,43 @@ namespace RainWorldWallpaperMod
                 // Update runs once per game tick, not once per rendered frame, so each call is 1/framesPerSecond real seconds.
                 activeController.Update(1f / Math.Max(1, self.framesPerSecond));
             }
+        }
+
+        // The vanilla pause menu opens on a new press of the pause button: RainWorldGame.Update compares
+        // RWInput.CheckPauseButton with its private lastPauseButton, which it sets to the current value after the
+        // check. Setting the field to true before every update means the button never counts as a new press.
+        private static readonly FieldInfo LastPauseButtonField = FindLastPauseButtonField();
+        private static readonly object BoxedTrue = true;
+        private static bool warnedAboutPauseButtonField;
+
+        private static FieldInfo FindLastPauseButtonField()
+        {
+            // This runs in a static initialiser, where an exception would stop the whole plugin from loading.
+            try
+            {
+                FieldInfo field = typeof(RainWorldGame).GetField("lastPauseButton", BindingFlags.Instance | BindingFlags.NonPublic);
+                return field != null && field.FieldType == typeof(bool) ? field : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static void MarkPauseButtonHeld(RainWorldGame game)
+        {
+            if (LastPauseButtonField == null)
+            {
+                if (!warnedAboutPauseButtonField)
+                {
+                    warnedAboutPauseButtonField = true;
+                    Log?.LogWarning("RainWorldGame.lastPauseButton was not found, so the vanilla pause menu cannot be suppressed; it is closed again after it opens instead");
+                }
+
+                return;
+            }
+
+            LastPauseButtonField.SetValue(game, BoxedTrue);
         }
 
         // RWInput is internal, so bind its pause check once; this keeps the fix on the player's own pause binding.
