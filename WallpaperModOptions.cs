@@ -98,6 +98,20 @@ namespace RainWorldWallpaperMod
             RottedKarma // Sentient Rot and karma flowers together
         }
 
+        // Allowed ranges for the numeric settings (seconds unless noted). Remix enforces them through the
+        // configurables' acceptable ranges, and WallpaperSettingsOverlay reuses them for its runtime changes
+        // so the two cannot drift apart.
+        public const float TransitionDurationRangeMin = 0.5f;
+        public const float TransitionDurationRangeMax = 60f;
+        public const float StayDurationRangeMin = 1f;
+        public const float StayDurationRangeMax = 600f;
+        public const float HudFadeDelayRangeMin = 0f;
+        public const float HudFadeDelayRangeMax = 60f;
+        public const int ChaosLevelRangeMin = 1;
+        public const int ChaosLevelRangeMax = 10;
+        public const int RainCountdownRangeMin = 0;
+        public const int RainCountdownRangeMax = 600;
+
         // Configuration values
         public readonly Configurable<float> TransitionDuration;
         public readonly Configurable<float> StayDuration;
@@ -117,19 +131,21 @@ namespace RainWorldWallpaperMod
         public WallpaperModOptions()
         {
             // Bind configuration values with defaults (using strings for enums to work with OpResourceSelector)
-            TransitionDuration = config.Bind("transitionDuration", 5f);
-            StayDuration = config.Bind("stayDuration", 15f);
-            HudFadeDelay = config.Bind("hudFadeDelay", 3f);
+            // Numeric values get an acceptable range, so Remix clamps anything outside it, including values
+            // loaded from an existing config file
+            TransitionDuration = config.Bind("transitionDuration", 5f, new ConfigAcceptableRange<float>(TransitionDurationRangeMin, TransitionDurationRangeMax));
+            StayDuration = config.Bind("stayDuration", 15f, new ConfigAcceptableRange<float>(StayDurationRangeMin, StayDurationRangeMax));
+            HudFadeDelay = config.Bind("hudFadeDelay", 3f, new ConfigAcceptableRange<float>(HudFadeDelayRangeMin, HudFadeDelayRangeMax));
             AlwaysShowHud = config.Bind("alwaysShowHud", false);
             StartRegion = config.Bind("startRegion", RegionChoice.SU.ToString());
             SelectedCampaign = config.Bind("selectedCampaign", CampaignChoice.White.ToString());
             CameraModeConfig = config.Bind("cameraMode", CameraMode.RandomExploration.ToString());
             EnableChaos = config.Bind("enableChaos", false);
-            ChaosLevel = config.Bind("chaosLevel", 1);
+            ChaosLevel = config.Bind("chaosLevel", 1, new ConfigAcceptableRange<int>(ChaosLevelRangeMin, ChaosLevelRangeMax));
             ChaosSpawnAll = config.Bind("chaosSpawnAll", false);
             NoRainTransition = config.Bind("noRainTransition", false);
-            RainCountdownMin = config.Bind("rainCountdownMin", 60);
-            RainCountdownMax = config.Bind("rainCountdownMax", 180);
+            RainCountdownMin = config.Bind("rainCountdownMin", 60, new ConfigAcceptableRange<int>(RainCountdownRangeMin, RainCountdownRangeMax));
+            RainCountdownMax = config.Bind("rainCountdownMax", 180, new ConfigAcceptableRange<int>(RainCountdownRangeMin, RainCountdownRangeMax));
             RotStateConfig = config.Bind("rotState", RotState.Natural.ToString());
         }
 
@@ -166,8 +182,10 @@ namespace RainWorldWallpaperMod
                 leftYPos -= lineHeight;
 
                 // Room Stay Duration
-                OpTextBox stayDurationBox = new OpTextBox(StayDuration, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                stayDurationBox.description = "Duration in seconds to stay in each room before transitioning (5-60)";
+                // Numeric settings use OpUpdown: it takes its bounds from the configurable's acceptable range,
+                // while OpTextBox accepts any number and only gets clamped when the config is saved
+                OpUpdown stayDurationBox = new OpUpdown(StayDuration, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
+                stayDurationBox.description = $"Duration in seconds to stay in each room before transitioning ({StayDurationRangeMin}-{StayDurationRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Room (sec):"));
                 uiElements.Add(stayDurationBox);
                 leftYPos -= lineHeight;
@@ -185,15 +203,15 @@ namespace RainWorldWallpaperMod
                 leftYPos -= lineHeight;
 
                 // Rain Countdown Min
-                OpTextBox rainCountdownMinBox = new OpTextBox(RainCountdownMin, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMinBox.description = "Minimum seconds for rain countdown before region change (10-300)";
+                OpUpdown rainCountdownMinBox = new OpUpdown(RainCountdownMin, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
+                rainCountdownMinBox.description = $"Minimum seconds for rain countdown before region change ({RainCountdownRangeMin}-{RainCountdownRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Min (sec):"));
                 uiElements.Add(rainCountdownMinBox);
                 leftYPos -= lineHeight;
 
                 // Rain Countdown Max
-                OpTextBox rainCountdownMaxBox = new OpTextBox(RainCountdownMax, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
-                rainCountdownMaxBox.description = "Maximum seconds for rain countdown before region change (30-600)";
+                OpUpdown rainCountdownMaxBox = new OpUpdown(RainCountdownMax, new Vector2(leftColumnControl, leftYPos - 5f), 80f);
+                rainCountdownMaxBox.description = $"Maximum seconds for rain countdown before region change ({RainCountdownRangeMin}-{RainCountdownRangeMax})";
                 uiElements.Add(new OpLabel(leftColumnLabel, leftYPos, "Rain Max (sec):"));
                 uiElements.Add(rainCountdownMaxBox);
 
@@ -206,15 +224,15 @@ namespace RainWorldWallpaperMod
                 rightYPos -= lineHeight;
 
                 // Transition Duration
-                OpTextBox transitionDurationBox = new OpTextBox(TransitionDuration, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                transitionDurationBox.description = "Duration in seconds for camera transitions between rooms (1-15)";
+                OpUpdown transitionDurationBox = new OpUpdown(TransitionDuration, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
+                transitionDurationBox.description = $"Duration in seconds for camera transitions between rooms ({TransitionDurationRangeMin}-{TransitionDurationRangeMax})";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Transition (sec):"));
                 uiElements.Add(transitionDurationBox);
                 rightYPos -= lineHeight;
 
                 // HUD Fade Delay
-                OpTextBox hudFadeDelayBox = new OpTextBox(HudFadeDelay, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
-                hudFadeDelayBox.description = "Delay in seconds before HUD fades out (1-10)";
+                OpUpdown hudFadeDelayBox = new OpUpdown(HudFadeDelay, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
+                hudFadeDelayBox.description = $"Delay in seconds before HUD fades out ({HudFadeDelayRangeMin}-{HudFadeDelayRangeMax})";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "HUD Fade (sec):"));
                 uiElements.Add(hudFadeDelayBox);
                 rightYPos -= lineHeight;
@@ -231,8 +249,8 @@ namespace RainWorldWallpaperMod
                 uiElements.Add(enableChaosBox);
                 rightYPos -= lineHeight;
 
-                // Chaos Level (1-10)
-                OpTextBox chaosLevelBox = new OpTextBox(ChaosLevel, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
+                // Chaos Level
+                OpUpdown chaosLevelBox = new OpUpdown(ChaosLevel, new Vector2(rightColumnControl, rightYPos - 5f), 80f);
                 chaosLevelBox.description = "Chaos intensity: 1 = Controlled (50 max), 10 = ABSOLUTE CHAOS (250 max)";
                 uiElements.Add(new OpLabel(rightColumnLabel, rightYPos, "Chaos Level:"));
                 uiElements.Add(chaosLevelBox);
@@ -361,46 +379,8 @@ namespace RainWorldWallpaperMod
         {
             base.Update();
 
-            // Clamp values to valid ranges
-            float transitionDuration = TransitionDuration.Value;
-            if (transitionDuration < 1f)
-                TransitionDuration.Value = 1f;
-            else if (transitionDuration > 15f)
-                TransitionDuration.Value = 15f;
-
-            float stayDuration = StayDuration.Value;
-            if (stayDuration < 5f)
-                StayDuration.Value = 5f;
-            else if (stayDuration > 60f)
-                StayDuration.Value = 60f;
-
-            float hudFadeDelay = HudFadeDelay.Value;
-            if (hudFadeDelay < 1f)
-                HudFadeDelay.Value = 1f;
-            else if (hudFadeDelay > 10f)
-                HudFadeDelay.Value = 10f;
-
-            int chaosLevel = ChaosLevel.Value;
-            if (chaosLevel < 1)
-                ChaosLevel.Value = 1;
-            else if (chaosLevel > 10)
-                ChaosLevel.Value = 10;
-
-            // Rain countdown range validation
-            int rainMin = RainCountdownMin.Value;
-            int rainMax = RainCountdownMax.Value;
-
-            // Clamp min to valid range (10-300)
-            if (rainMin < 10)
-                RainCountdownMin.Value = 10;
-            else if (rainMin > 300)
-                RainCountdownMin.Value = 300;
-
-            // Clamp max to valid range (30-600)
-            if (rainMax < 30)
-                RainCountdownMax.Value = 30;
-            else if (rainMax > 600)
-                RainCountdownMax.Value = 600;
+            // Each numeric value is already clamped to its own range by the configurable (see the constructor).
+            // The rain countdown bounds also depend on each other, which a per-value range cannot express.
 
             // Ensure min <= max
             if (RainCountdownMin.Value > RainCountdownMax.Value)

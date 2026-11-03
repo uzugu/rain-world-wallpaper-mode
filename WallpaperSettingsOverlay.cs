@@ -189,7 +189,7 @@ namespace RainWorldWallpaperMod
         private void RefreshChaosLabels()
         {
             bool chaosEnabled = WallpaperMod.Options?.EnableChaos.Value ?? false;
-            int chaosLevel = WallpaperMod.Options?.ChaosLevel.Value ?? 1;
+            int chaosLevel = WallpaperMod.Options?.ChaosLevel.Value ?? WallpaperModOptions.ChaosLevelRangeMin;
             bool chaosSpawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
             bool noRainTransition = WallpaperMod.Options?.NoRainTransition.Value ?? false;
 
@@ -454,15 +454,15 @@ namespace RainWorldWallpaperMod
             }
             else if (currentFocus == 7)
             {
-                // Chaos level cycling (1-10)
+                // Chaos level cycling within the allowed range
                 if (WallpaperMod.Options != null)
                 {
                     int currentLevel = WallpaperMod.Options.ChaosLevel.Value;
                     int newLevel = currentLevel + direction;
 
-                    // Wrap around between 1 and 10
-                    if (newLevel < 1) newLevel = 10;
-                    if (newLevel > 10) newLevel = 1;
+                    // Wrap around between the lowest and highest allowed level
+                    if (newLevel < WallpaperModOptions.ChaosLevelRangeMin) newLevel = WallpaperModOptions.ChaosLevelRangeMax;
+                    if (newLevel > WallpaperModOptions.ChaosLevelRangeMax) newLevel = WallpaperModOptions.ChaosLevelRangeMin;
 
                     WallpaperMod.Options.ChaosLevel.Value = newLevel;
                     RefreshChaosLabels();
