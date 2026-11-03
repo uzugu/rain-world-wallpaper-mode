@@ -103,11 +103,23 @@ The current runtime is built around these hooks:
 - `RainWorldGame.Update`
 - `RainWorldGame.ShutDownProcess`
 - `RoomCamera.Update`
+- `Room.Loaded`
 - `Player.Update`
+- `Overseer.Update`
+- `PlayerProgression.SaveDeathPersistentDataOfCurrentState`
+- `PlayerProgression.SaveProgression`
 - `MainMenu.ctor`
 - `MainMenu.Update`
 
 ## Key Design Decisions
+
+### Wallpaper Sessions Never Save
+
+Wallpaper sessions start through `StoryGameInitCondition.RegionSelect`, so the game builds a blank save state for the selected campaign and pre-saves its death-persistent data (karma, karma cap, echoes, passages) "as a death" while the `RainWorldGame` constructor runs. Without a guard, every session start and region reload would overwrite that campaign's real progress. The save hooks skip all progression saves while a wallpaper game is being built or is running. The vanilla pause menu that the pause button opens is closed again, because its EXIT also saves as a death.
+
+### Game Ticks, Not Frames
+
+`RainWorldGame.Update` runs once per game tick (`framesPerSecond`, normally 40), not once per rendered frame. All wallpaper timers advance by `1 / framesPerSecond` per tick, so durations stay in real seconds at any monitor refresh rate.
 
 ### Spectator-State Enforcement
 
