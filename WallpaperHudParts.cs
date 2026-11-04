@@ -241,6 +241,9 @@ namespace RainWorldWallpaperMod
 
         public const string ControllerHint = "Stick Rooms/Camera   A Skip   LB/RB Region   X Lock   Y HUD   Start Settings";
 
+        // A hosted desktop wallpaper gets mouse clicks but no keys (WallpaperHostMode).
+        public const string HostedWallpaperHint = "Double-click Settings";
+
         // The cycle percentage at which No Rain Wait changes region. Mirrors WallpaperRainCycleController.NoRainThreshold.
         private const int NoRainThresholdPercent = 95;
 

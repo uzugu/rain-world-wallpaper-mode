@@ -21,6 +21,27 @@ namespace RainWorldWallpaperMod
         private const uint GA_PARENT = 1;
         private const uint TH32CS_SNAPPROCESS = 0x00000002;
         private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+        private static readonly IntPtr HwndBottom = new IntPtr(1);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint ENABLE_MOUSE_INPUT = 0x0010;
+        private const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
+        private const uint ENABLE_EXTENDED_FLAGS = 0x0080;
+        private const uint GENERIC_READ = 0x80000000;
+        private const uint GENERIC_WRITE = 0x40000000;
+        private const uint FILE_SHARE_READ = 0x00000001;
+        private const uint FILE_SHARE_WRITE = 0x00000002;
+        private const uint OPEN_EXISTING = 3;
+
+        // A double-click opens the settings menu, since a hosted wallpaper gets mouse clicks but no keys.
+        private const float DoubleClickSeconds = 0.5f;
+        private const float DoubleClickDistance = 24f;
+        private const float ConsoleCheckSeconds = 2f;
+
+        private static float lastClickTime = float.NegativeInfinity;
+        private static Vector2 lastClickPosition;
+        private static float nextConsoleCheck;
 
         // Programs that run application wallpapers: Wallpaper Engine (wallpaper32/64.exe, and ui32.exe for its editor
         // preview) and Lively Wallpaper. When one of them starts the game, host mode turns on without launch arguments.
@@ -147,11 +168,116 @@ namespace RainWorldWallpaperMod
             Application.runInBackground = true;
 
             bool consoleHidden = HideConsoleWindow();
+            bool quickEditOff = consoleHidden && DisableConsoleQuickEdit();
             On.Options.OnLoadFinished += Options_OnLoadFinished;
 
             WallpaperMod.Log?.LogInfo(
                 $"Wallpaper host mode: runs without focus (was {ranInBackground}), " +
-                $"{(consoleHidden ? "BepInEx console hidden" : "no console window")}, the game stays windowed");
+                $"{(consoleHidden ? $"BepInEx console hidden{(quickEditOff ? " and its QuickEdit turned off" : string.Empty)}" : "no console window")}, " +
+                "the game stays windowed");
+        }
+
+        /// <summary>
+        /// Keeps the BepInEx console out of the way while a host holds the game. Wallpaper Engine moves every window of
+        /// the program into its own wallpaper window, the console included, and passes mouse clicks on to them; with the
+        /// console on top it took the clicks meant for the game. Called every frame, it only acts every few seconds.
+        /// </summary>
+        internal static void MaintainConsole()
+        {
+            if (!Active || Time.unscaledTime < nextConsoleCheck)
+            {
+                return;
+            }
+
+            nextConsoleCheck = Time.unscaledTime + ConsoleCheckSeconds;
+            try
+            {
+                IntPtr console = GetConsoleWindow();
+                if (console == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                if (IsWindowVisible(console))
+                {
+                    ShowWindow(console, SW_HIDE);
+                }
+
+                IntPtr parent = GetAncestor(console, GA_PARENT);
+                if (parent != IntPtr.Zero && parent != GetDesktopWindow())
+                {
+                    // Bottom of the host window's children, under the game window, without moving or resizing it.
+                    SetWindowPos(console, HwndBottom, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogWarning($"Wallpaper host mode: could not tidy the console window: {ex.Message}");
+                nextConsoleCheck = float.PositiveInfinity;
+            }
+        }
+
+        /// <summary>
+        /// True on the frame that completes a double-click with the left mouse button. Called every frame rather than
+        /// per game tick, because a host passes clicks on as window messages and a press and its release can land in
+        /// the same frame, between two ticks. While tracking is off (no wallpaper session, or the settings menu is open)
+        /// earlier clicks are forgotten, so the click that closes the menu cannot count as half of a double-click.
+        /// </summary>
+        internal static bool ConsumeDoubleClick(bool track)
+        {
+            if (!Active || !track)
+            {
+                lastClickTime = float.NegativeInfinity;
+                return false;
+            }
+
+            if (!Input.GetMouseButtonDown(0))
+            {
+                return false;
+            }
+
+            float now = Time.unscaledTime;
+            Vector2 position = Input.mousePosition;
+            bool isDoubleClick = now - lastClickTime <= DoubleClickSeconds &&
+                (position - lastClickPosition).sqrMagnitude <= DoubleClickDistance * DoubleClickDistance;
+
+            // A completed double-click starts over, so a third click does not open the menu again.
+            lastClickTime = isDoubleClick ? float.NegativeInfinity : now;
+            lastClickPosition = position;
+            return isDoubleClick;
+        }
+
+        // QuickEdit lets a click start a text selection in the console, and while a selection is open every write to the
+        // console blocks the thread that writes. BepInEx logs to the console from the game's main thread, so one click
+        // that a host passed on to the hidden console froze the whole game. Turning QuickEdit (and console mouse input)
+        // off in the console's input mode stops clicks from selecting anything.
+        private static bool DisableConsoleQuickEdit()
+        {
+            IntPtr input = InvalidHandleValue;
+            try
+            {
+                input = CreateFile("CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+                if (input == InvalidHandleValue || !GetConsoleMode(input, out uint mode))
+                {
+                    return false;
+                }
+
+                uint quietMode = (mode | ENABLE_EXTENDED_FLAGS) & ~(ENABLE_QUICK_EDIT_MODE | ENABLE_MOUSE_INPUT);
+                return quietMode == mode || SetConsoleMode(input, quietMode);
+            }
+            catch (Exception ex)
+            {
+                WallpaperMod.Log?.LogWarning($"Wallpaper host mode: could not turn off the console's QuickEdit: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                if (input != InvalidHandleValue && input != IntPtr.Zero)
+                {
+                    CloseHandle(input);
+                }
+            }
         }
 
         internal static void Deactivate()
@@ -337,6 +463,25 @@ namespace RainWorldWallpaperMod
         [DllImport("kernel32.dll", EntryPoint = "SetEnvironmentVariableW", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetEnvironmentVariable(string name, string value);
+
+        [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateFile(string fileName, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetConsoleMode(IntPtr consoleHandle, out uint mode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetConsoleMode(IntPtr consoleHandle, uint mode);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr GetConsoleWindow();

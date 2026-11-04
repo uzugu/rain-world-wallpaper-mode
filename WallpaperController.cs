@@ -750,6 +750,24 @@ namespace RainWorldWallpaperMod
         /// <summary>
         /// Toggle room lock (prevents automatic room transitions)
         /// </summary>
+        public bool IsSettingsMenuOpen => uiController.IsSettingsActive;
+
+        /// <summary>
+        /// Opens the settings menu from a double-click on a hosted wallpaper, which gets mouse clicks but no keys. The
+        /// menu is then used with the mouse; its CLOSE and TRAVEL buttons close it again.
+        /// </summary>
+        public void OpenSettingsMenuFromWallpaper()
+        {
+            if (uiController.IsSettingsActive)
+            {
+                return;
+            }
+
+            WallpaperMod.Log?.LogInfo("WallpaperController: Settings menu requested by a double-click on the wallpaper");
+            uiController.RegisterUserActivity();
+            uiController.ToggleSettingsMenu(this);
+        }
+
         public void ToggleRoomLock()
         {
             isRoomLocked = !isRoomLocked;

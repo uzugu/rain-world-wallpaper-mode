@@ -63,6 +63,25 @@ namespace RainWorldWallpaperMod
             MenuIntegration.Initialize();
         }
 
+        // Every frame, and only for a hosted wallpaper: keep the BepInEx console out of the host's way, and open the
+        // settings menu on a double-click, the one input a wallpaper gets (no keys reach it).
+        private void Update()
+        {
+            if (!WallpaperHostMode.Active)
+            {
+                return;
+            }
+
+            WallpaperHostMode.MaintainConsole();
+
+            WallpaperController controller = activeController;
+            bool canOpenMenu = controller != null && !controller.IsSettingsMenuOpen;
+            if (WallpaperHostMode.ConsumeDoubleClick(canOpenMenu))
+            {
+                controller.OpenSettingsMenuFromWallpaper();
+            }
+        }
+
         public void BeginWallpaperMode(ProcessManager manager)
         {
             if (manager == null)

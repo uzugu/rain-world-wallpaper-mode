@@ -481,7 +481,9 @@ namespace RainWorldWallpaperMod
             if (shownDevice != device)
             {
                 shownDevice = device;
-                string hint = device == WallpaperInputDevice.Controller ? WallpaperHudText.ControllerHint : WallpaperHudText.KeyboardHint;
+                string hint = WallpaperHostMode.Active
+                    ? WallpaperHudText.HostedWallpaperHint
+                    : device == WallpaperInputDevice.Controller ? WallpaperHudText.ControllerHint : WallpaperHudText.KeyboardHint;
                 SetLineText(controlsBlock, controlsLine, hint);
             }
         }
