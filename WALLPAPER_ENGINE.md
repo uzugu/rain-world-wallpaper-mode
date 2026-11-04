@@ -17,7 +17,8 @@ The host has to start `RainWorld.exe` itself. When the program that starts the g
 
 - starts wallpaper mode from the main menu without a click
 - keeps the game running when it does not have focus, which a wallpaper never has
-- hides the BepInEx console window, so the game shows a single window
+- hides the BepInEx console window, so the game shows a single window, and turns off the console's QuickEdit so a click can never pause the game
+- opens the settings menu on a double-click on the wallpaper
 - keeps the game windowed, and leaves its window alone once the host has taken it
 
 ### Why A Steam Launch Does Not Work
@@ -84,7 +85,7 @@ Behavior:
 
 ## Limits
 
-- A wallpaper gets no keyboard input, so the hotkeys and the in-game settings menu cannot be used. Set things up in Remix first.
+- A wallpaper gets mouse clicks (Wallpaper Engine passes them on) but no keyboard input, so the hotkeys do not work. **Double-click the wallpaper** to open the settings menu and use it with the mouse; its CLOSE button puts the wallpaper back. Changes made there last until the wallpaper restarts; for lasting ones, use Remix.
 - The first start after a mod update takes longer, because Rain World re-applies its mods.
 - This is still Rain World running, with the game's normal CPU and GPU cost.
 - Stability depends on the installed mod set. For wallpaper use, keep the stack small.
