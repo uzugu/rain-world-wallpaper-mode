@@ -134,6 +134,7 @@ The current runtime is built around these hooks:
 - `RainWorld.OnModsInit`
 - `ProcessManager.RequestMainProcessSwitch_ProcessID`
 - `RainWorldGame.ctor`
+- `StoryGameSession.ctor`
 - `RainWorldGame.Update`
 - `RainWorldGame.ShutDownProcess`
 - `RoomCamera.Update`
@@ -149,6 +150,7 @@ The current runtime is built around these hooks:
 
 - `RainWorldGame.Update` sets the game's private `lastPauseButton` field to `true` before the original update runs. The vanilla pause menu only opens on a new press of the pause button, so it never opens in a wallpaper session and the pause button (Escape, Start) is free for the settings menu and for leaving. If the field cannot be found, one warning is logged and the pause menu is closed again after it opens instead. A pause opened by the Steam overlay is left alone. The same hook then runs `WallpaperController.Update` once per game tick.
 - `RainWorldGame.ShutDownProcess` runs `WallpaperController.Shutdown`, which stops the settings menu together with the rest of the UI.
+- `StoryGameSession.ctor` turns Jolly Co-op off (`ModManager.CoopAvailable = false`) while a wallpaper game is being built, as the `RainWorldGame` constructor itself does for Safari mode. A wallpaper session has no players; with co-op on, the session would spawn every Jolly player, the HUD would add the Jolly parts, and the co-op camera would follow whatever is left in `game.Players` (chaos slugpups). The main menu and the next story game turn co-op back on.
 
 ## Key Design Decisions
 

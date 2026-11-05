@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace RainWorldWallpaperMod
@@ -51,6 +52,7 @@ namespace RainWorldWallpaperMod
             On.RainWorld.OnModsInit += RainWorld_OnModsInit;
             On.ProcessManager.RequestMainProcessSwitch_ProcessID += ProcessManager_RequestMainProcessSwitch;
             On.RainWorldGame.ctor += RainWorldGame_ctor;
+            On.StoryGameSession.ctor += StoryGameSession_ctor;
             On.RainWorldGame.Update += RainWorldGame_Update;
             On.RainWorldGame.ShutDownProcess += RainWorldGame_ShutDownProcess;
             On.RoomCamera.Update += RoomCamera_Update;
@@ -203,6 +205,45 @@ namespace RainWorldWallpaperMod
                 activeController = new WallpaperController(self, requestedStartRegion);
                 pendingWallpaperLaunch = false;
             }
+        }
+
+        // RainWorldGame's constructor turns Jolly Co-op on (CoopAvailable = JollyCoop) right before it builds the story
+        // session, except in Safari mode, the game's own way of watching the world without a player. A wallpaper session
+        // has no players either, so it runs like Safari: with co-op on, the session would spawn every Jolly player, the HUD
+        // would add the Jolly parts, and the co-op camera would keep following whatever is left in game.Players (chaos
+        // slugpups). The main menu and the next story game set CoopAvailable from JollyCoop again.
+        private void StoryGameSession_ctor(On.StoryGameSession.orig_ctor orig, StoryGameSession self, SlugcatStats.Name saveStateNumber, RainWorldGame game)
+        {
+            if (constructingWallpaperGame)
+            {
+                try
+                {
+                    if (TurnOffCoopForSession())
+                    {
+                        Log?.LogInfo("Jolly Co-op is off for this wallpaper session, as in Safari mode");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log?.LogWarning($"Could not turn Jolly Co-op off for the wallpaper session: {ex.Message}");
+                }
+            }
+
+            orig(self, saveStateNumber, game);
+        }
+
+        // Kept out of the hook so a game version without this field fails here, inside the hook's try, instead of when
+        // the hook itself is compiled, which would break every story session.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool TurnOffCoopForSession()
+        {
+            if (!ModManager.CoopAvailable)
+            {
+                return false;
+            }
+
+            ModManager.CoopAvailable = false;
+            return true;
         }
 
         private void RainWorldGame_Update(On.RainWorldGame.orig_Update orig, RainWorldGame self)
@@ -482,6 +523,7 @@ namespace RainWorldWallpaperMod
             On.RainWorld.OnModsInit -= RainWorld_OnModsInit;
             On.ProcessManager.RequestMainProcessSwitch_ProcessID -= ProcessManager_RequestMainProcessSwitch;
             On.RainWorldGame.ctor -= RainWorldGame_ctor;
+            On.StoryGameSession.ctor -= StoryGameSession_ctor;
             On.RainWorldGame.Update -= RainWorldGame_Update;
             On.RainWorldGame.ShutDownProcess -= RainWorldGame_ShutDownProcess;
             On.RoomCamera.Update -= RoomCamera_Update;
