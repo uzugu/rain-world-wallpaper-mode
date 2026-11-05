@@ -372,7 +372,10 @@ namespace RainWorldWallpaperMod
         }
 
         // The game's own window (class UnityWndClass) in this process: a top-level window until a host embeds it, a
-        // child of the host's window afterwards. The BepInEx console belongs to the process too, so the class decides.
+        // child of the host's window afterwards. The BepInEx console belongs to the process too, so the class decides,
+        // and only a visible window counts: under Wallpaper Engine (-parentHWND) Unity also keeps a small hidden
+        // top-level window of the same class, which would otherwise be found first and make the embedded game look
+        // like a plain window, so Rain World's own windowed size got applied to the wallpaper.
         private static IntPtr FindGameWindow()
         {
             uint processId = (uint)Process.GetCurrentProcess().Id;
@@ -417,7 +420,7 @@ namespace RainWorldWallpaperMod
         private static bool IsGameWindow(IntPtr window, uint processId)
         {
             GetWindowThreadProcessId(window, out uint owner);
-            if (owner != processId)
+            if (owner != processId || !IsWindowVisible(window))
             {
                 return false;
             }
