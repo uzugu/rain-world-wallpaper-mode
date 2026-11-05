@@ -37,7 +37,7 @@ The Remix button above does this for you. To set it up yourself instead, choose 
 
 If Rain World was last run fullscreen, set it to windowed in the game's options first, or point Wallpaper Engine at a shortcut whose target adds `-screen-fullscreen 0`.
 
-Wallpaper Engine's own settings (Performance) decide whether the wallpaper pauses or stops while another program is fullscreen.
+Wallpaper Engine's own settings (Performance) decide whether the wallpaper pauses or stops while another program is maximized or fullscreen. When it pauses, it freezes the whole game process, so a wallpaper picked while a maximized window is in front does not start, and looks stuck, until that window is gone.
 
 ## Lively Wallpaper
 
