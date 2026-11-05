@@ -115,6 +115,7 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - scales spawn timing and caps by chaos level
   - re-analyzes regions after reloads
   - protects the wallpaper session from problematic creature types through a blacklist unless `Spawn All` is enabled
+  - lists at most four slugpups in `game.Players`, Rain World's own player limit: `ScavengersWorldAI` keeps per-player kill squads in arrays of four, and a fifth entry made it throw on every tick in regions with a scavenger outpost
 
 ### Packaging
 

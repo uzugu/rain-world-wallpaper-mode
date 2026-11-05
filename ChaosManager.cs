@@ -52,6 +52,12 @@ namespace RainWorldWallpaperMod
 
         private float rampUpInterval = 10f; // Fast spawn interval for first half
 
+        // Rain World never has more than four players, and some of its code keeps per-player data in arrays of four:
+        // ScavengersWorldAI.Update indexes each scavenger outpost's int[4] killSquads by the position in game.Players.
+        // A fifth entry there throws IndexOutOfRangeException on every tick while a region with an outpost (Outskirts
+        // has one) is loaded, which stops the rain cycle, the rooms and the wallpaper itself.
+        private const int MaxGamePlayers = 4;
+
         // Creature types excluded from normal chaos mode. Spawn All intentionally bypasses this list.
         private static readonly HashSet<string> BlacklistedCreatures = new HashSet<string>
         {
@@ -574,8 +580,9 @@ namespace RainWorldWallpaperMod
                 // WallpaperMod.Log?.LogInfo($"DEBUG: Configured SlugNPC personality and food");
             }
             
-            // CRITICAL FIX: Add to game.Players so AI doesn't crash when looking for players
-            if (!game.Players.Contains(creature))
+            // CRITICAL FIX: Add to game.Players so AI doesn't crash when looking for players, but only up to the game's
+            // own player count (MaxGamePlayers); pups past that still spawn, they are just not listed as players
+            if (game.Players.Count < MaxGamePlayers && !game.Players.Contains(creature))
             {
                 game.Players.Add(creature);
                 // WallpaperMod.Log?.LogInfo($"DEBUG: Added SlugNPC {creature.ID} to game.Players to prevent AI crash");
