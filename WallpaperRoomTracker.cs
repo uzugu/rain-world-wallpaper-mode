@@ -132,7 +132,31 @@ namespace RainWorldWallpaperMod
                 !room.gate &&
                 !room.offScreenDen &&
                 !string.IsNullOrWhiteSpace(room.name) &&
-                !UnsafeStoryRooms.Contains(room.name);
+                !UnsafeStoryRooms.Contains(room.name) &&
+                !IsDisabledInThisWorld(room);
+        }
+
+        // A room that belongs to another campaign's timeline (EXCLUSIVEROOM) or that this campaign hides (HIDEROOM) is
+        // still loaded into the world, unreachable and with exits that lead nowhere back; the world loader only lists it
+        // in World.DisabledMapRooms, which the game also uses to keep creature spawns and overseers out. A chaos slugpup
+        // spawned in one (the Watcher's SU_B09W in another campaign's Outskirts) made RandomMoveToOtherRoom throw.
+        private static bool IsDisabledInThisWorld(AbstractRoom room)
+        {
+            List<string> disabledRooms = room.world?.DisabledMapRooms;
+            if (disabledRooms == null)
+            {
+                return false;
+            }
+
+            foreach (string disabledRoom in disabledRooms)
+            {
+                if (string.Equals(disabledRoom, room.name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public static bool IsSafeWallpaperRoomName(string roomName)

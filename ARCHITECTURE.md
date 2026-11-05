@@ -164,6 +164,10 @@ Wallpaper sessions start through `StoryGameInitCondition.RegionSelect`, so the g
 
 The mod continuously removes or suppresses player-controlled slugcats while allowing slugpups and NPC-style slugcats to keep updating. This is necessary for a wallpaper presentation that still allows the world to feel alive.
 
+### Rooms The Wallpaper Uses
+
+`WallpaperRoomTracker.IsSafeWallpaperRoom` decides which rooms the camera tours, chaos spawns into and the settings menu offers for travel. It leaves out gates, the off-screen den, the oracle chambers (their room scripts start story events that expect a player) and every room in `World.DisabledMapRooms`. Rain World's world loader keeps another campaign's exclusive rooms (`EXCLUSIVEROOM`) and the rooms the current campaign hides (`HIDEROOM`) in the world as unreachable rooms whose exits lead nowhere back, and only lists them there; the game itself uses that list to keep creature spawns and overseers out of them.
+
 ### Rain-Driven Region Traversal
 
 The original fixed region dwell concept has been replaced in practice by rain-cycle-driven transitions. Documentation and future work should treat the rain cycle as the authoritative region-change trigger unless the implementation changes again.
