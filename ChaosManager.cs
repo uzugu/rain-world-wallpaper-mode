@@ -438,23 +438,22 @@ namespace RainWorldWallpaperMod
             {
                 try 
                 {
-                    // Pick a random connection
+                    // Pick a random connection. Connections hold world room indices, which start at the region's
+                    // firstRoomIndex rather than 0, so look the rooms up through the world (null for -1 or out of range)
                     var neighbors = currentRoom.abstractRoom.connections;
-                    // Filter out -1 (no connection) and current room
-                    var validNeighbors = new System.Collections.Generic.List<int>();
+                    var validNeighbors = new System.Collections.Generic.List<AbstractRoom>();
                     foreach (var n in neighbors)
                     {
-                        if (n > -1 && n < game.world.abstractRooms.Length && n != currentRoom.abstractRoom.index &&
-                            IsValidChaosSpawnRoom(game.world.abstractRooms[n]))
+                        AbstractRoom neighbor = n > -1 ? game.world.GetAbstractRoom(n) : null;
+                        if (neighbor != null && neighbor.index != currentRoom.abstractRoom.index && IsValidChaosSpawnRoom(neighbor))
                         {
-                            validNeighbors.Add(n);
+                            validNeighbors.Add(neighbor);
                         }
                     }
 
                     if (validNeighbors.Count > 0)
                     {
-                        int neighborIndex = validNeighbors[UnityEngine.Random.Range(0, validNeighbors.Count)];
-                        spawnRoom = game.world.abstractRooms[neighborIndex];
+                        spawnRoom = validNeighbors[UnityEngine.Random.Range(0, validNeighbors.Count)];
                         // WallpaperMod.Log?.LogInfo($"ChaosManager: Selected neighbor room {spawnRoom.name} for spawn");
                     }
                 }
