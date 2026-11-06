@@ -167,6 +167,10 @@ namespace RainWorldWallpaperMod
         {
             sessionState.CompleteTransition();
 
+            // On the first move of a session the tracker has no previous room, but the camera is still in the room the
+            // session started in. Left loaded, that room would run off screen until the region changes.
+            AbstractRoom leftRoom = roomTracker.PreviousRoom ?? camera.room?.abstractRoom;
+
             bool isNewRoom = false;
             if (roomTracker.CurrentTargetRoom?.realizedRoom != null)
             {
@@ -175,9 +179,9 @@ namespace RainWorldWallpaperMod
                 isNewRoom = roomTracker.CompleteTransition();
             }
 
-            if (roomTracker.PreviousRoom?.realizedRoom != null && roomTracker.PreviousRoom != roomTracker.CurrentTargetRoom)
+            if (leftRoom?.realizedRoom != null && leftRoom != roomTracker.CurrentTargetRoom)
             {
-                roomTracker.PreviousRoom.Abstractize();
+                leftRoom.Abstractize();
             }
 
             if (isNewRoom)
