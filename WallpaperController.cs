@@ -47,7 +47,7 @@ namespace RainWorldWallpaperMod
             currentRegionCode = startRegion;
             RegionManager = new RegionManager(this, startRegion);
             Echoes = new EchoManager(game);
-            ChaosManager = new ChaosManager(game, this);
+            ChaosManager = new ChaosManager(game);
             transitionController = new WallpaperTransitionController(game, roomTracker, RegionManager, Echoes);
 
             // Load settings from config
@@ -112,7 +112,7 @@ namespace RainWorldWallpaperMod
 
             Echoes?.Update();
             SyncChaosRuntimeState();
-            ChaosManager?.Update(dt);
+            ChaosManager?.Update();
             uiController.Hud?.Update(dt);
         }
 

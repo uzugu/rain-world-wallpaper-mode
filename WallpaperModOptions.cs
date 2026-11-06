@@ -216,11 +216,11 @@ namespace RainWorldWallpaperMod
                 top -= RemixPage.CardHeight(5) + CardGap;
                 page.BeginCard("CREATURES", leftColumn, top, CardWidth, RemixPage.CardHeight(3));
                 page.AddCheckBox("Chaos creatures", EnableChaos,
-                    "Spawn extra creatures into the rooms the camera visits.");
-                page.AddNumber("Chaos level", ChaosLevel,
-                    $"How many creatures appear and how quickly ({ChaosLevelRangeMin}-{ChaosLevelRangeMax}): level 1 keeps up to 5 at once, level 10 up to 150. Above 7 the game may lag or crash.");
+                    "Fills the region with many more of its own creatures, in the dens the game gives them.");
+                page.AddNumber("Chaos level", ChaosLevel, DescribeChaosLevels(),
+                    level => $"{ChaosManager.CreaturesAtLevel(level)} creatures");
                 page.AddCheckBox("Every creature (experimental)", ChaosSpawnAll,
-                    "Experimental: also spawn creature types that are normally left out. May crash the game.");
+                    "Experimental: half of the extra creatures come from anywhere in the game, not just this region. May crash the game.");
 
                 top = CardsTop;
                 page.BeginCard("TIMING", rightColumn, top, CardWidth, RemixPage.CardHeight(4));
@@ -300,6 +300,17 @@ namespace RainWorldWallpaperMod
         /// that order, because Remix draws later items on top: card backgrounds, then labels and simple controls, then
         /// dropdowns.
         /// </summary>
+        private static string DescribeChaosLevels()
+        {
+            var counts = new List<string>();
+            for (int level = ChaosLevelRangeMin; level <= ChaosLevelRangeMax; level++)
+            {
+                counts.Add(ChaosManager.CreaturesAtLevel(level).ToString());
+            }
+
+            return $"Extra creatures in the region. Each level doubles the one below it: {string.Join(", ", counts.ToArray())}. Levels 9 and 10 can lag in crowded rooms.";
+        }
+
         private sealed class RemixPage
         {
             public const float CardPadding = 12f;
@@ -406,6 +417,35 @@ namespace RainWorldWallpaperMod
                 {
                     description = description
                 });
+            }
+
+            /// <summary>
+            /// A whole number setting with a short note beside it that says what the current value means.
+            /// </summary>
+            public void AddNumber(string label, Configurable<int> config, string description, Func<int, string> note)
+            {
+                float centerY = TakeRow(label, NumberWidth);
+                var updown = new OpUpdown(config, new Vector2(contentRight - NumberWidth, centerY - 15f), NumberWidth)
+                {
+                    description = description
+                };
+
+                float noteWidth = contentRight - NumberWidth - LabelGap - contentLeft;
+                var noteLabel = new OpLabel(new Vector2(contentLeft, centerY - 10f), new Vector2(noteWidth, 20f), note(config.Value), FLabelAlignment.Right)
+                {
+                    color = DarkGrey
+                };
+
+                updown.OnValueUpdate += (control, value, oldValue) =>
+                {
+                    if (int.TryParse(value, out int number))
+                    {
+                        noteLabel.text = note(number);
+                    }
+                };
+
+                items.Add(updown);
+                items.Add(noteLabel);
             }
 
             public void AddCheckBox(string label, Configurable<bool> config, string description)

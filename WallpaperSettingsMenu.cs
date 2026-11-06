@@ -224,13 +224,13 @@ namespace RainWorldWallpaperMod
             AddSectionHeader("CREATURES", y);
             y -= 36f;
             AddCheckBox("Chaos creatures", IdChaos, y,
-                "Spawn extra creatures into the rooms you visit.");
+                "Fills the region with many more of its own creatures.");
             y -= RowPitch;
             chaosLevelRow = AddCyclerRow("Chaos level", SignalChaosLevelPrev, SignalChaosLevelNext, y,
-                "How often creatures appear and how many can be alive at once.");
+                "How many extra creatures the region gets. Each level doubles the one below it. Level 9 and up can lag.");
             y -= RowPitch;
             AddCheckBox("Spawn every creature (experimental)", IdChaosSpawnAll, y,
-                "Experimental: also spawns creature types that are normally left out.");
+                "Experimental: half of the extra creatures come from anywhere in the game, not just this region.");
             y -= 28f;
             MenuLabel note = AddLeftLabel(Translate("Creature changes apply in the next region"), y);
             note.label.color = MenuRGB(MenuColors.DarkGrey);
@@ -606,7 +606,7 @@ namespace RainWorldWallpaperMod
                 rotStateRowEnabled);
 
             int chaosLevel = WallpaperMod.Options?.ChaosLevel.Value ?? WallpaperModOptions.ChaosLevelRangeMin;
-            SetRowValue(chaosLevelRow, chaosLevel.ToString(), true);
+            SetRowValue(chaosLevelRow, ChaosManager.DescribeLevel(chaosLevel), true);
         }
 
         private static void SetRowValue(CyclerRow row, string text, bool enabled)

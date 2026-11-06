@@ -1,146 +1,99 @@
-using System.Collections.Generic;
-using UnityEngine;
 using System;
+using System.Collections.Generic;
+using MoreSlugcats;
+using UnityEngine;
 
 namespace RainWorldWallpaperMod
 {
     /// <summary>
-    /// Manages dynamic creature spawning to create a more lively environment
+    /// Chaos mode: many more of the creatures a region already has.
+    ///
+    /// The game fills a region from the CREATURES list of its world file, which names a den for every creature and differs
+    /// per campaign (World.spawners). Chaos runs that same list again, more times, the way WorldLoader.GeneratePopulation
+    /// does: each new creature starts in the den its spawner names and leaves it when the game lets it. So every creature
+    /// is one the region really has, in a place it really lives, and nothing here decides what goes where or follows the
+    /// camera. Whether the camera meets them is left to chance, and with enough of them it will.
+    ///
+    /// Levels are exponential: level 5 adds 150 creatures, and each level doubles the one below it.
     /// </summary>
     public class ChaosManager
     {
-        private readonly RainWorldGame game;
-        private readonly WallpaperController controller;
+        private const int CreaturesAtLevelFive = 150;
+        private const int MaxSpawnsPerTick = 20;
+        private const int TicksBetweenPrunes = 40;
+        private const int TicksBetweenStatusLines = 400;
+        private const int RoomPickAttempts = 10;
 
-        // Chaos configuration
-        private int chaosLevel = 0; // 0 = disabled,1-10 = intensity levels
-        private bool chaosEnabled = false;
+        // A region's chance of a slugpup per cycle, used as their share of the new creatures, up to this much.
+        private const float MaxSlugpupShare = 0.5f;
 
-        // Spawning timing
-        private float spawnTimer = 0f;
-        private float spawnInterval = 45f; // Seconds between spawns
+        // With the "every creature" setting on, the share of new creatures that come from anywhere in the game.
+        private const float EveryCreatureShare = 0.5f;
 
-        // Creature management
-        private readonly List<AbstractCreature> spawnedCreatures = new List<AbstractCreature>();
-        private int maxCreatures = 50;
+        // Overseers need a player (OverseerCommunicationModule), and a Slugcat is one.
+        private static readonly HashSet<string> NeverSpawned = new HashSet<string> { "Slugcat", "Overseer" };
 
-        // Region creature analysis
-        private readonly List<CreatureTemplate.Type> regionalCreatureTypes = new List<CreatureTemplate.Type>();
-        private bool hasAnalyzedRegion = false;
-        private float regionLoadTimer = 0f;
-        private const float REGION_LOAD_DELAY = 3f; // Wait 3 seconds for world to fully load creatures
-
-        // Weight-based spawn system - prevents too many powerful creatures
-        private readonly Dictionary<CreatureTemplate.Type, int> creatureWeightCounters = new Dictionary<CreatureTemplate.Type, int>();
-
-        // Spawn timing by chaos level (1-10)
-        // Format: (normal interval, max creatures, ramp-up interval)
-        // Balanced levels (5-7) recommended for performance stability
-        private static readonly Dictionary<int, (float interval, int maxCreatures, float rampUpInterval)> ChaosLevels = new Dictionary<int, (float, int, float)>
+        // These only work in the place the game puts them, so the "every creature" setting leaves them out. In their own
+        // dens, where the region's list has them, they are fine.
+        private static readonly HashSet<string> NeedsOwnDen = new HashSet<string>
         {
-            { 1, (45f, 5, 10f) },     // Level 1: Minimal - 5 creatures max
-            { 2, (40f, 8, 9f) },      // Level 2: Light - 8 creatures max
-            { 3, (35f, 12, 8f) },     // Level 3: Moderate - 12 creatures max
-            { 4, (30f, 18, 7f) },     // Level 4: Active - 18 creatures max
-            { 5, (25f, 25, 6f) },     // Level 5: Balanced starting point - 25 creatures max
-            { 6, (20f, 35, 5f) },     // Level 6: Getting busy - 35 creatures max
-            { 7, (15f, 50, 4f) },     // Level 7: Maximum recommended - 50 creatures max
-            { 8, (12f, 70, 3f) },     // Level 8: Heavy - 70 creatures max (may lag)
-            { 9, (10f, 100, 2f) },    // Level 9: Extreme - 100 creatures max (risky)
-            { 10, (8f, 150, 1f) }     // Level 10: ABSOLUTE CHAOS - 150 creatures max (very risky)
-        };
-
-        private float rampUpInterval = 10f; // Fast spawn interval for first half
-
-        // Rain World never has more than four players, and some of its code keeps per-player data in arrays of four:
-        // ScavengersWorldAI.Update indexes each scavenger outpost's int[4] killSquads by the position in game.Players.
-        // A fifth entry there throws IndexOutOfRangeException on every tick while a region with an outpost (Outskirts
-        // has one) is loaded, which stops the rain cycle, the rooms and the wallpaper itself.
-        private const int MaxGamePlayers = 4;
-
-        // Creature types excluded from normal chaos mode. Spawn All intentionally bypasses this list.
-        private static readonly HashSet<string> BlacklistedCreatures = new HashSet<string>
-        {
-            "Slugcat",              // Player creatures - cannot be spawned like regular creatures
-            "Overseer",             // Special entities that need specific initialization
-            "TempleGuard",          // Special scripted creatures
-            "DaddyLongLegs",        // Known to cause null reference issues in spectator mode
-            "TentaclePlant",        // Stationary, might not work offscreen
-            "PoleMimic",            // Stationary, might not work offscreen
-            "StowawayBug",          // Tentacle-based creature that crashes when spawned offscreen
-            "StandardGroundCreature" // Base class, not an actual creature type
-        };
-
-        // Weight system - larger/stronger creatures have higher weights (spawn less often)
-        private static readonly Dictionary<string, int> CreatureWeights = new Dictionary<string, int>
-        {
-            // Weight 2 - Small/Common (every 2 rolls)
-            { "Fly", 2 }, { "DropBug", 2 }, { "EggBug", 2 }, { "Snail", 2 }, { "Hazer", 2 }, { "VultureGrub", 2 },
-            { "CicadaA", 2 }, { "CicadaB", 2 },
-            { "SmallNeedleWorm", 2 }, { "BigNeedleWorm", 2 },
-            { "SmallCentipede", 2 }, { "Centipede", 2 },
-            { "TubeWorm", 2 }, { "JetFish", 2 },
-
-            // Weight 3 - Standard Lizards & Medium Creatures
-            { "PinkLizard", 3 }, { "GreenLizard", 3 }, { "BlueLizard", 3 }, { "WhiteLizard", 3 },
-            { "YellowLizard", 3 }, { "BlackLizard", 3 }, { "Salamander", 3 },
-            { "BigSpider", 3 }, { "SpitterSpider", 3 },
-            { "GarbageWorm", 3 }, { "BigEel", 3 },
-
-            // Weight 3 - Scavengers (increased spawn rate)
-            { "Scavenger", 3 },
-            { "ScavengerElite", 3 },
-
-            // Weight 1 - Slugpups (Very Frequent Spawn Rate)
-            { "SlugNPC", 1 },
-
-            // Weight 4 - Dangerous/Aggressive
-            { "RedLizard", 4 }, { "CyanLizard", 4 },
-            { "SpitLizard", 4 }, { "EelLizard", 4 }, { "TrainLizard", 4 },
-            { "MirosBird", 4 },
-            { "Leech", 4 }, { "SeaLeech", 4 },
-            { "AquaCenti", 4 },
-
-            // Weight 5 - Elite Tier
-            { "RedCentipede", 5 },
-            { "MirosVulture", 5 },
-
-            // Weight 8 - Vultures (reduced spawn rate)
-            { "Vulture", 8 },
-
-            // Weight 10 - King Vultures (very rare)
-            { "KingVulture", 10 },
-
-            // Weight 15 - Ultra Rare Scavengers
-            { "ScavengerKing", 15 },
-
-            // Weight 6 - Very Rare
-            { "BrotherLongLegs", 6 },
-
-            // Weight 10 - Ultra Rare (only with Spawn All)
-            { "DaddyLongLegs", 10 },
-            { "TempleGuard", 10 }
+            "GarbageWorm",          // Lives in garbage holes
+            "TentaclePlant",        // MMF kills these outside a den
+            "PoleMimic",
+            "Deer"                  // Only travels through transportation nodes
         };
 
         /// <summary>
-        /// Get spawn weight for a creature type (higher = spawns less often)
+        /// One line of a region's creature list: a den, and what it can hold. A lineage is a chain of creatures that the
+        /// game moves along over the cycles, any of which can live in that den.
         /// </summary>
-        private int GetCreatureWeight(CreatureTemplate.Type type)
+        private sealed class DenEntry
         {
-            if (CreatureWeights.TryGetValue(type.ToString(), out int weight))
-            {
-                return weight;
-            }
-            // Default weight for unknown creatures
-            return 3;
+            public WorldCoordinate Den;
+            public readonly List<KeyValuePair<CreatureTemplate, string>> Residents = new List<KeyValuePair<CreatureTemplate, string>>();
         }
 
-        public ChaosManager(RainWorldGame game, WallpaperController controller)
+        private readonly RainWorldGame game;
+
+        // Everyone chaos added who is still alive. Bodies stay in the world, and they are replaced.
+        private readonly List<AbstractCreature> crowd = new List<AbstractCreature>();
+
+        // A den appears once per creature the region's list puts there, so a pick is as likely as the list makes it.
+        private readonly List<DenEntry> roster = new List<DenEntry>();
+        private readonly List<CreatureTemplate> everyCreature = new List<CreatureTemplate>();
+
+        private int chaosLevel;
+        private bool chaosEnabled;
+        private bool rosterReady;
+        private bool spawningFailed;
+        private float slugpupShare;
+        private int ticksUntilPrune;
+        private int ticksSinceStatusLine;
+        private float lastStatusLineTime;
+
+        public ChaosManager(RainWorldGame game)
         {
             this.game = game;
-            this.controller = controller;
 
             WallpaperMod.Log?.LogInfo("ChaosManager: Initialized (disabled by default)");
+        }
+
+        public bool IsEnabled => chaosEnabled;
+
+        /// <summary>
+        /// How many extra creatures a region holds at this level.
+        /// </summary>
+        public static int CreaturesAtLevel(int level)
+        {
+            return Mathf.RoundToInt(CreaturesAtLevelFive * Mathf.Pow(2f, level - 5));
+        }
+
+        /// <summary>
+        /// What a level means, for the settings menus.
+        /// </summary>
+        public static string DescribeLevel(int level)
+        {
+            return $"{level} ({CreaturesAtLevel(level)} extra creatures)";
         }
 
         /// <summary>
@@ -150,29 +103,17 @@ namespace RainWorldWallpaperMod
         {
             // Clamp instead of rejecting: WallpaperController retries EnableChaos every tick while IsEnabled is false,
             // so rejecting a bad saved level would warn on every tick and chaos would never start
-            if (level < 1 || level > 10)
+            int allowedLevel = Mathf.Clamp(level, WallpaperModOptions.ChaosLevelRangeMin, WallpaperModOptions.ChaosLevelRangeMax);
+            if (allowedLevel != level)
             {
-                int clampedLevel = Mathf.Clamp(level, 1, 10);
-                WallpaperMod.Log?.LogWarning($"ChaosManager: Chaos level {level} is outside 1-10, using {clampedLevel}");
-                level = clampedLevel;
+                WallpaperMod.Log?.LogWarning($"ChaosManager: Chaos level {level} is out of range, using {allowedLevel}");
             }
 
-            chaosLevel = level;
+            chaosLevel = allowedLevel;
             chaosEnabled = true;
+            rosterReady = false;
 
-            if (ChaosLevels.TryGetValue(level, out var settings))
-            {
-                spawnInterval = settings.interval;
-                maxCreatures = settings.maxCreatures;
-                rampUpInterval = settings.rampUpInterval;
-            }
-
-            spawnTimer = 0f;
-            regionLoadTimer = 0f; // Start load delay timer
-            hasAnalyzedRegion = false; // Force re-analysis on next update
-
-            WallpaperMod.Log?.LogInfo($"ChaosManager: Enabled at level {level} (ramp-up every {rampUpInterval}s for first {maxCreatures / 2}, then every {spawnInterval}s, max {maxCreatures} creatures)");
-            WallpaperMod.Log?.LogInfo($"ChaosManager: Waiting {REGION_LOAD_DELAY}s for world to fully load before analyzing creatures...");
+            WallpaperMod.Log?.LogInfo($"ChaosManager: Enabled at level {chaosLevel}, {CreaturesAtLevel(chaosLevel)} extra creatures in the region");
         }
 
         /// <summary>
@@ -188,563 +129,308 @@ namespace RainWorldWallpaperMod
         }
 
         /// <summary>
-        /// Get current spawn interval based on ramp-up phase
+        /// Called once per game tick. Keeps the region at its number of extra creatures, so whoever dies is replaced.
         /// </summary>
-        private float GetCurrentSpawnInterval()
+        public void Update()
         {
-            // Use fast ramp-up interval for first half of max creatures
-            int halfMax = maxCreatures / 2;
-            if (spawnedCreatures.Count < halfMax)
-            {
-                return rampUpInterval;
-            }
-            // Use normal interval after reaching half
-            return spawnInterval;
-        }
-
-        /// <summary>
-        /// Update chaos system - spawn creatures based on timer
-        /// </summary>
-        public void Update(float dt)
-        {
-            if (!chaosEnabled || game?.world == null)
+            if (!chaosEnabled || spawningFailed || game?.world == null)
             {
                 return;
             }
 
-            // Wait for world to fully load before analyzing creatures
-            if (!hasAnalyzedRegion)
+            if (!rosterReady)
             {
-                regionLoadTimer += dt;
-                if (regionLoadTimer >= REGION_LOAD_DELAY)
-                {
-                    WallpaperMod.Log?.LogInfo($"ChaosManager: World loaded for {REGION_LOAD_DELAY}s, analyzing creatures now...");
-                    AnalyzeRegionCreatures();
-                }
-                else
-                {
-                    // Still waiting for world to load
-                    return;
-                }
+                BuildRoster();
             }
 
-            // Clean up dead/removed creatures
-            CleanupDeadCreatures();
-
-            // Spawning logic with dynamic interval (fast ramp-up, then normal)
-            float currentInterval = GetCurrentSpawnInterval();
-            spawnTimer += dt;
-            if (spawnTimer >= currentInterval && spawnedCreatures.Count < maxCreatures)
+            ticksUntilPrune--;
+            if (ticksUntilPrune <= 0)
             {
-                SpawnRandomCreature();
-                spawnTimer = 0f;
+                ticksUntilPrune = TicksBetweenPrunes;
+                crowd.RemoveAll(IsGone);
             }
+
+            int missing = CreaturesAtLevel(chaosLevel) - crowd.Count;
+            for (int i = 0; i < Mathf.Min(missing, MaxSpawnsPerTick) && !spawningFailed; i++)
+            {
+                SpawnOne();
+            }
+
+            LogStatus();
         }
 
-        /// <summary>
-        /// Analyze the current region to determine what creatures spawn naturally
-        /// </summary>
-        private void AnalyzeRegionCreatures()
+        // How many of them the camera is actually meeting, and whether the game keeps up. The tick length the wallpaper is
+        // handed is nominal, so the tick rate has to come from real time.
+        private void LogStatus()
         {
-            regionalCreatureTypes.Clear();
-
-            if (game?.world?.abstractRooms == null)
+            ticksSinceStatusLine++;
+            if (ticksSinceStatusLine < TicksBetweenStatusLines)
             {
-                WallpaperMod.Log?.LogWarning("ChaosManager: Cannot analyze region - world not ready");
                 return;
             }
 
-            bool spawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
-            var seenTypes = new HashSet<CreatureTemplate.Type>();
-            var blacklistedTypes = new HashSet<string>();
+            float now = Time.realtimeSinceStartup;
+            float ticksPerSecond = lastStatusLineTime > 0f && now > lastStatusLineTime ? ticksSinceStatusLine / (now - lastStatusLineTime) : 0f;
+            lastStatusLineTime = now;
+            ticksSinceStatusLine = 0;
 
-            // Scan all rooms in the region for creature spawners
-            foreach (var room in game.world.abstractRooms)
+            AbstractRoom room = game.cameras != null && game.cameras.Length > 0 ? game.cameras[0].room?.abstractRoom : null;
+            int inView = 0;
+            if (room != null)
             {
-                if (room?.creatures == null)
+                foreach (AbstractCreature creature in room.creatures)
                 {
-                    continue;
-                }
-
-                foreach (var creature in room.creatures)
-                {
-                    if (creature?.creatureTemplate?.type != null)
+                    if (creature.state.alive)
                     {
-                        var type = creature.creatureTemplate.type;
-
-                        // Skip if already seen
-                        if (seenTypes.Contains(type))
-                        {
-                            continue;
-                        }
-
-                        seenTypes.Add(type);
-
-                        if (!spawnAll && IsBlacklisted(type))
-                        {
-                            blacklistedTypes.Add(type.ToString());
-                            continue;
-                        }
-
-                        TryAddCreatureType(type, regionalCreatureTypes, enforceBlacklist: !spawnAll);
+                        inView++;
                     }
                 }
             }
 
-            hasAnalyzedRegion = true;
+            WallpaperMod.Log?.LogDebug($"ChaosManager: {crowd.Count}/{CreaturesAtLevel(chaosLevel)} extra creatures alive, {inView} creatures in {room?.name}, {ticksPerSecond:0} ticks/s, {game.world.activeRooms.Count} rooms loaded");
+        }
 
-            // Chaos level 7+: Force-add SlugNPC, Scavenger (all variations), and ScavengerKing to any region
-            if (chaosLevel >= 7)
+        private void BuildRoster()
+        {
+            rosterReady = true;
+            roster.Clear();
+            everyCreature.Clear();
+
+            foreach (World.CreatureSpawner spawner in game.world.spawners)
             {
-                WallpaperMod.Log?.LogInfo($"ChaosManager: 🔥 Chaos 7+ activated - forcing special creatures into spawn pool");
-                WallpaperMod.Log?.LogInfo($"ChaosManager: Downpour DLC enabled = {ModCompatibility.IsDownpourEnabled}");
-
-                // Add vanilla Scavenger
-                if (!regionalCreatureTypes.Contains(CreatureTemplate.Type.Scavenger))
+                if (spawner is World.SimpleSpawner simple)
                 {
-                    regionalCreatureTypes.Add(CreatureTemplate.Type.Scavenger);
-                    WallpaperMod.Log?.LogInfo($"ChaosManager: ✓ Force-added Scavenger (vanilla)");
+                    var entry = new DenEntry { Den = simple.den };
+                    AddResident(entry, simple.creatureType, simple.spawnDataString);
+                    AddToRoster(entry, simple.amount);
                 }
-
-                // Add DLC creatures if Downpour is installed
-                if (ModCompatibility.IsDownpourEnabled)
+                else if (spawner is World.Lineage lineage)
                 {
-                    // Force add SlugNPC (Slugpup)
-                    var slugNPC = new CreatureTemplate.Type("SlugNPC", true);
-                    if (TryAddCreatureType(slugNPC, regionalCreatureTypes, enforceBlacklist: false))
+                    var entry = new DenEntry { Den = lineage.den };
+                    for (int i = 0; i < lineage.creatureTypes.Length; i++)
                     {
-                        WallpaperMod.Log?.LogInfo($"ChaosManager: ✓ Force-added SlugNPC (Slugpup)");
-                    }
-
-                    var dlcCreatureNames = new[] { "ScavengerElite", "ScavengerKing" };
-
-                    foreach (var creatureName in dlcCreatureNames)
-                    {
-                        try
+                        if (lineage.creatureTypes[i] >= 0)
                         {
-                            // Create the type - constructor with true will register it if it doesn't exist
-                            var creatureType = new CreatureTemplate.Type(creatureName, true);
-
-                            if (TryAddCreatureType(creatureType, regionalCreatureTypes, enforceBlacklist: false))
-                            {
-                                WallpaperMod.Log?.LogInfo($"ChaosManager: ✓ Force-added {creatureName} (DLC)");
-                            }
-                            else
-                            {
-                                WallpaperMod.Log?.LogInfo($"ChaosManager: ⊙ {creatureName} already in spawn pool");
-                            }
-                        }
-                        catch (System.Exception ex)
-                        {
-                            WallpaperMod.Log?.LogError($"ChaosManager: ✗ Failed to add {creatureName}: {ex.Message}\n{ex.StackTrace}");
+                            var type = new CreatureTemplate.Type(ExtEnum<CreatureTemplate.Type>.values.GetEntry(lineage.creatureTypes[i]));
+                            AddResident(entry, type, lineage.spawnData[i]);
                         }
                     }
+
+                    AddToRoster(entry, 1);
                 }
-                else
+            }
+
+            slugpupShare = FindSlugpupShare();
+
+            if (WallpaperMod.Options?.ChaosSpawnAll.Value ?? false)
+            {
+                foreach (CreatureTemplate template in StaticWorld.creatureTemplates)
                 {
-                    WallpaperMod.Log?.LogInfo("ChaosManager: Downpour DLC not installed, skipping ScavengerElite/ScavengerKing");
+                    if (IsSpawnable(template) && !NeedsOwnDen.Contains(template.type.ToString()))
+                    {
+                        everyCreature.Add(template);
+                    }
                 }
             }
 
-            if (spawnAll)
-            {
-                WallpaperMod.Log?.LogWarning($"ChaosManager: ⚠️ SPAWN ALL MODE ENABLED - Blacklist disabled! Found {regionalCreatureTypes.Count} creature types:");
-            }
-            else
-            {
-                WallpaperMod.Log?.LogInfo($"ChaosManager: Analyzed region {game.world.name}, found {regionalCreatureTypes.Count} spawnable creature types:");
-            }
+            LogRoster();
+        }
 
-            foreach (var type in regionalCreatureTypes)
-            {
-                WallpaperMod.Log?.LogInfo($"  ✓ {type}");
-            }
+        // Swarm creatures (batflies, leeches, coalescipedes) are only a number per room until the room loads, so they are
+        // not creatures to multiply here. They stay as the game has them.
+        private static bool IsSpawnable(CreatureTemplate template)
+        {
+            return template != null && !template.virtualCreature && !template.quantified &&
+                !NeverSpawned.Contains(template.type.ToString());
+        }
 
-            if (!spawnAll && blacklistedTypes.Count > 0)
+        private static void AddResident(DenEntry entry, CreatureTemplate.Type type, string spawnData)
+        {
+            CreatureTemplate template = StaticWorld.GetCreatureTemplate(type);
+            if (IsSpawnable(template))
             {
-                WallpaperMod.Log?.LogInfo($"ChaosManager: Filtered out {blacklistedTypes.Count} blacklisted creature types:");
-                foreach (var type in blacklistedTypes)
-                {
-                    WallpaperMod.Log?.LogInfo($"  ✗ {type}");
-                }
-            }
-
-            if (regionalCreatureTypes.Count == 0)
-            {
-                WallpaperMod.Log?.LogWarning("ChaosManager: No spawnable creatures found in this region!");
+                entry.Residents.Add(new KeyValuePair<CreatureTemplate, string>(template, spawnData));
             }
         }
 
-        /// <summary>
-        /// Spawn a random creature from the regional pool offscreen (with weight system)
-        /// </summary>
-        private void SpawnRandomCreature()
+        // The checks GeneratePopulation makes before it puts a creature in a den.
+        private void AddToRoster(DenEntry entry, int amount)
         {
-            if (regionalCreatureTypes.Count == 0)
-            {
-                WallpaperMod.Log?.LogWarning("ChaosManager: No creature types available to spawn");
-                return;
-            }
-
-            if (game?.cameras == null || game.cameras.Length == 0 || game.cameras[0]?.room == null)
+            AbstractRoom room = game.world.GetAbstractRoom(entry.Den);
+            if (entry.Residents.Count == 0 || room == null || entry.Den.abstractNode >= room.nodes.Length ||
+                (room.nodes[entry.Den.abstractNode].type != AbstractRoomNode.Type.Den &&
+                 room.nodes[entry.Den.abstractNode].type != AbstractRoomNode.Type.GarbageHoles))
             {
                 return;
             }
 
-            var camera = game.cameras[0];
-            var currentRoom = camera.room;
-
-            // Pick random creature type
-            // var random = new System.Random();
-            var creatureType = regionalCreatureTypes[UnityEngine.Random.Range(0, regionalCreatureTypes.Count)];
-
-            // Get weight for this creature
-            int weight = GetCreatureWeight(creatureType);
-
-            // Initialize counter if needed
-            if (!creatureWeightCounters.ContainsKey(creatureType))
+            for (int i = 0; i < Mathf.Max(1, amount); i++)
             {
-                creatureWeightCounters[creatureType] = 0;
+                roster.Add(entry);
+            }
+        }
+
+        // Slugpups are not on the creature lists. The game gives each region a chance of one per cycle, and only in these
+        // campaigns (StoryGameSession.slugPupMaxCount). It also asks for a beaten Gourmand campaign, which a wallpaper
+        // should not depend on.
+        private float FindSlugpupShare()
+        {
+            SlugcatStats.Name campaign = game.StoryCharacter;
+            bool campaignHasPups = campaign == SlugcatStats.Name.White || campaign == SlugcatStats.Name.Red ||
+                campaign == MoreSlugcatsEnums.SlugcatStatsName.Gourmand;
+            if (!ModManager.MSC || !campaignHasPups || game.world.region == null)
+            {
+                return 0f;
             }
 
-            // Increment counter
-            creatureWeightCounters[creatureType]++;
-            int currentCount = creatureWeightCounters[creatureType];
+            return Mathf.Min(game.world.region.regionParams.slugPupSpawnChance, MaxSlugpupShare);
+        }
 
-            // WallpaperMod.Log?.LogInfo($"ChaosManager: Rolled {creatureType} ({currentCount}/{weight})");
-
-            // Check if we've reached threshold
-            if (currentCount < weight)
+        private void LogRoster()
+        {
+            var counts = new Dictionary<string, int>();
+            foreach (DenEntry entry in roster)
             {
-                // Building up - don't spawn yet
-                // WallpaperMod.Log?.LogInfo($"ChaosManager: Building up {creatureType}: {currentCount}/{weight}");
-                return;
-            }
-
-            // Reset counter to 1 (keeping momentum as requested)
-            creatureWeightCounters[creatureType] = 1;
-
-            // Pick a random room in the region (not the current room)
-            if (game.world.abstractRooms == null || game.world.abstractRooms.Length <= 1)
-            {
-                WallpaperMod.Log?.LogWarning("ChaosManager: Not enough rooms in region for spawning");
-                return;
-            }
-
-            AbstractRoom spawnRoom = null;
-            
-            // Try to spawn in a connected neighbor room first (for better visibility)
-            if (currentRoom.abstractRoom.connections != null && currentRoom.abstractRoom.connections.Length > 0)
-            {
-                try 
+                foreach (KeyValuePair<CreatureTemplate, string> resident in entry.Residents)
                 {
-                    // Pick a random connection. Connections hold world room indices, which start at the region's
-                    // firstRoomIndex rather than 0, so look the rooms up through the world (null for -1 or out of range)
-                    var neighbors = currentRoom.abstractRoom.connections;
-                    var validNeighbors = new System.Collections.Generic.List<AbstractRoom>();
-                    foreach (var n in neighbors)
-                    {
-                        AbstractRoom neighbor = n > -1 ? game.world.GetAbstractRoom(n) : null;
-                        if (neighbor != null && neighbor.index != currentRoom.abstractRoom.index && IsValidChaosSpawnRoom(neighbor))
-                        {
-                            validNeighbors.Add(neighbor);
-                        }
-                    }
-
-                    if (validNeighbors.Count > 0)
-                    {
-                        spawnRoom = validNeighbors[UnityEngine.Random.Range(0, validNeighbors.Count)];
-                        // WallpaperMod.Log?.LogInfo($"ChaosManager: Selected neighbor room {spawnRoom.name} for spawn");
-                    }
-                }
-                catch (System.Exception) { /* Ignore and fall back to random */ }
-            }
-
-            // Fallback to random room if neighbor selection failed
-            if (spawnRoom == null)
-            {
-                int attempts = 0;
-                while (attempts < 10)
-                {
-                    var randomRoom = game.world.abstractRooms[UnityEngine.Random.Range(0, game.world.abstractRooms.Length)];
-                    if (randomRoom != null && randomRoom.index != currentRoom.abstractRoom.index &&
-                        IsValidChaosSpawnRoom(randomRoom))
-                    {
-                        spawnRoom = randomRoom;
-                        break;
-                    }
-                    attempts++;
+                    string name = resident.Key.type.ToString();
+                    counts.TryGetValue(name, out int count);
+                    counts[name] = count + 1;
                 }
             }
 
-            if (spawnRoom == null)
+            var parts = new List<string>();
+            foreach (KeyValuePair<string, int> pair in counts)
             {
-                WallpaperMod.Log?.LogWarning("ChaosManager: Could not find different room for spawn after 10 attempts");
-                return;
+                parts.Add($"{pair.Key} {pair.Value}");
             }
 
+            parts.Sort(string.CompareOrdinal);
+            WallpaperMod.Log?.LogInfo($"ChaosManager: {game.world.name} roster has {roster.Count} den places: {string.Join(", ", parts.ToArray())}; slugpup share {slugpupShare:0.##}; every creature list {everyCreature.Count}");
+        }
+
+        private void SpawnOne()
+        {
             try
             {
-                // Create abstract creature in the spawn room (NOT current room)
-                bool spawnAll = WallpaperMod.Options?.ChaosSpawnAll.Value ?? false;
-                if (!spawnAll && IsBlacklisted(creatureType))
+                if (UnityEngine.Random.value < slugpupShare)
                 {
-                    WallpaperMod.Log?.LogWarning($"ChaosManager: Refusing blacklisted spawn type {creatureType}");
-                    return;
+                    SpawnInAnyRoom(StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC));
                 }
-
-                // Issued by the game so it cannot collide with another entity (EntityID equality compares the number only)
-                var entityID = game.GetNewID();
-                var creatureTemplate = StaticWorld.GetCreatureTemplate(creatureType);
-                if (creatureTemplate == null)
+                else if (everyCreature.Count > 0 && UnityEngine.Random.value < EveryCreatureShare)
                 {
-                    WallpaperMod.Log?.LogWarning($"ChaosManager: No template for {creatureType}, skipping spawn");
-                    return;
+                    SpawnInAnyRoom(everyCreature[UnityEngine.Random.Range(0, everyCreature.Count)]);
                 }
-
-                var abstractCreature = new AbstractCreature(
-                    game.world,
-                    creatureTemplate,
-                    null,
-                    spawnRoom.RandomNodeInRoom(),
-                    entityID
-                );
-
-                // Initialize AI if the template supports it
-                if (creatureTemplate.AI && abstractCreature.abstractAI == null)
+                else if (roster.Count > 0)
                 {
-                    abstractCreature.InitiateAI();
-                }
-
-                // Custom handling for specific creatures
-                if (creatureType.ToString().Contains("Scavenger"))
-                {
-                    // The game's own gear-up, called before AddEntity as MSC does for scavengers it spawns into a room.
-                    // ScavengerAbstractAI only gears up scavengers created in the offscreen den by itself, plus Templars
-                    // and Disciples, which already carry their gear here (hence the stuckObjects check)
-                    if (abstractCreature.abstractAI is ScavengerAbstractAI scavengerAI && abstractCreature.stuckObjects.Count == 0)
-                    {
-                        scavengerAI.InitGearUp();
-                    }
-                }
-                else if (creatureType.ToString() == "SlugNPC")
-                {
-                    HandleSlugNPC(abstractCreature);
-                }
-
-                // Add to spawn room (creatures will naturally migrate through the world)
-                spawnRoom.AddEntity(abstractCreature);
-
-                spawnedCreatures.Add(abstractCreature);
-
-                int halfMax = maxCreatures / 2;
-                bool justReachedHalf = spawnedCreatures.Count == halfMax;
-
-                if (justReachedHalf)
-                {
-                    WallpaperMod.Log?.LogInfo($"ChaosManager: 🔥 Ramp-up phase complete! Spawned {creatureType} [weight {weight}] in room {spawnRoom.name} (total: {spawnedCreatures.Count}/{maxCreatures}) - switching to normal spawn rate");
-                }
-                else
-                {
-                    WallpaperMod.Log?.LogDebug($"ChaosManager: Spawned {creatureType} [weight {weight}] in room {spawnRoom.name} (total: {spawnedCreatures.Count}/{maxCreatures})");
+                    SpawnInDen(roster[UnityEngine.Random.Range(0, roster.Count)]);
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                WallpaperMod.Log?.LogError($"ChaosManager: Failed to spawn {creatureType}: {ex.Message}");
+                // A creature that cannot be built would only fail again, every tick. Clearing chaosEnabled would not hold,
+                // as WallpaperController turns chaos back on while the setting says so.
+                WallpaperMod.Log?.LogError($"ChaosManager: Stopped until the next region after a creature failed to spawn: {ex}");
+                spawningFailed = true;
             }
         }
 
-        /// <summary>
-        /// Configure SlugNPC (Slugpup) to be more active and independent
-        /// </summary>
-        /// <summary>
-        /// Configure SlugNPC (Slugpup) to be more active and independent
-        /// </summary>
-        private void HandleSlugNPC(AbstractCreature creature)
+        private void SpawnInDen(DenEntry entry)
         {
-            // WallpaperMod.Log?.LogInfo($"DEBUG: Handling SlugNPC {creature.ID}");
+            KeyValuePair<CreatureTemplate, string> resident = entry.Residents[UnityEngine.Random.Range(0, entry.Residents.Count)];
+            AbstractCreature creature = CreateCreature(resident.Key, entry.Den, resident.Value);
+            creature.Room.MoveEntityToDen(creature);
+        }
+
+        // For creatures with no den on the region's list. AddEntity only registers a creature, so a room that is already
+        // loaded would never show it; the room must load after it.
+        private void SpawnInAnyRoom(CreatureTemplate template)
+        {
+            AbstractRoom[] rooms = game.world.abstractRooms;
+            for (int attempt = 0; attempt < RoomPickAttempts; attempt++)
+            {
+                AbstractRoom room = rooms[UnityEngine.Random.Range(0, rooms.Length)];
+                if (WallpaperRoomTracker.IsSafeWallpaperRoom(room) && room.realizedRoom == null &&
+                    room.AttractionForCreature(template.type) != AbstractRoom.CreatureRoomAttraction.Forbidden &&
+                    room.NodesRelevantToCreature(template) > 0)
+                {
+                    room.AddEntity(CreateCreature(template, new WorldCoordinate(room.index, -1, -1, room.RandomRelevantNode(template)), null));
+                    return;
+                }
+            }
+        }
+
+        private AbstractCreature CreateCreature(CreatureTemplate template, WorldCoordinate place, string spawnData)
+        {
+            var creature = new AbstractCreature(game.world, template, null, place, game.GetNewID());
+            creature.spawnData = spawnData;
+            creature.setCustomFlags();
+
+            // A den's list can hold a creature back for the night or for before the rain, and everyone heads for a den in
+            // the last minute of the cycle. These stay out whatever the hour, or most of them would never be seen.
+            creature.ignoreCycle = true;
+            creature.preCycle = false;
+
+            if (template.type == MoreSlugcatsEnums.CreatureTemplateType.SlugNPC)
+            {
+                ConfigureSlugpup(creature);
+            }
+
+            crowd.Add(creature);
+            return creature;
+        }
+
+        // Makes a slugpup energetic and brave. It is not listed in game.Players: with anyone in that list an echo's encounter
+        // can end the session and ScavengersWorldAI indexes arrays of four by it.
+        private static void ConfigureSlugpup(AbstractCreature creature)
+        {
             if (creature.state is PlayerState playerState)
             {
-                // Make them energetic and brave
-                // Re-assign personality to ensure changes stick
-                AbstractCreature.Personality pers = creature.personality;
-                pers.energy = 1f;
-                pers.bravery = 1f;
-                pers.nervous = 0f;
-                pers.sympathy = 0f;
-                creature.personality = pers;
+                AbstractCreature.Personality personality = creature.personality;
+                personality.energy = 1f;
+                personality.bravery = 1f;
+                personality.nervous = 0f;
+                personality.sympathy = 0f;
+                creature.personality = personality;
 
-                playerState.foodInStomach = 6; // Full belly
-                // WallpaperMod.Log?.LogInfo($"DEBUG: Configured SlugNPC personality and food");
+                playerState.foodInStomach = 6;
             }
-            
-            // CRITICAL FIX: Add to game.Players so AI doesn't crash when looking for players, but only up to the game's
-            // own player count (MaxGamePlayers); pups past that still spawn, they are just not listed as players
-            if (game.Players.Count < MaxGamePlayers && !game.Players.Contains(creature))
-            {
-                game.Players.Add(creature);
-                // WallpaperMod.Log?.LogInfo($"DEBUG: Added SlugNPC {creature.ID} to game.Players to prevent AI crash");
-            }
+        }
 
-            if (creature.abstractAI != null)
-            {
-                // Force them to move to the current camera room
-                if (game.cameras != null && game.cameras.Length > 0 && game.cameras[0].room != null)
-                {
-                    int targetRoomIndex = game.cameras[0].room.abstractRoom.index;
-                    creature.abstractAI.SetDestination(new WorldCoordinate(targetRoomIndex, -1, -1, -1));
-                    // WallpaperMod.Log?.LogInfo($"DEBUG: SlugNPC destination set to current room {targetRoomIndex}");
-                }
-            }
-            else
-            {
-                // WallpaperMod.Log?.LogWarning($"DEBUG: SlugNPC has no abstractAI!");
-            }
+        private static bool IsGone(AbstractCreature creature)
+        {
+            return creature.slatedForDeletion || creature.state.dead ||
+                (creature.realizedCreature != null && creature.realizedCreature.slatedForDeletetion);
         }
 
         /// <summary>
-        /// Remove creatures that have been destroyed or removed from world
-        /// </summary>
-        private void CleanupDeadCreatures()
-        {
-            spawnedCreatures.RemoveAll(creature =>
-            {
-                if (creature == null)
-                {
-                    return true;
-                }
-
-                if (!IsGoneFromWorld(creature))
-                {
-                    return false;
-                }
-
-                // HandleSlugNPC added pups to game.Players, so a pup that is gone must not stay there
-                if (game?.session != null)
-                {
-                    game.Players.Remove(creature);
-                }
-                return true; // Remove from list
-            });
-        }
-
-        /// <summary>
-        /// True once the game has destroyed the creature or taken it out of the world. Checking only the realized creature
-        /// misses creatures removed while abstract: AbstractCreature.Abstractize can destroy one whose realizedCreature is
-        /// already null, and AbstractRoom.Abstractize turns a live quantified creature (Fly, Leech, Spider) that has stuck
-        /// objects into a per-room count with RemoveEntity, without destroying it. Either way the entry would hold a
-        /// maxCreatures slot for the rest of the world session.
-        /// </summary>
-        private static bool IsGoneFromWorld(AbstractCreature creature)
-        {
-            if (creature.slatedForDeletion ||
-                (creature.realizedCreature != null && creature.realizedCreature.slatedForDeletetion))
-            {
-                return true;
-            }
-
-            if (!creature.creatureTemplate.quantified || creature.realizedCreature != null)
-            {
-                return false;
-            }
-
-            AbstractRoom room = creature.Room;
-            return room != null && !room.creatures.Contains(creature) && !room.entitiesInDens.Contains(creature);
-        }
-
-        private static bool IsBlacklisted(CreatureTemplate.Type type)
-        {
-            return type == null || BlacklistedCreatures.Contains(type.ToString());
-        }
-
-        private static bool TryAddCreatureType(CreatureTemplate.Type type, List<CreatureTemplate.Type> list, bool enforceBlacklist)
-        {
-            if ((enforceBlacklist && IsBlacklisted(type)) || type == null || list.Contains(type) || StaticWorld.GetCreatureTemplate(type) == null)
-            {
-                return false;
-            }
-
-            list.Add(type);
-            return true;
-        }
-
-        private static bool IsValidChaosSpawnRoom(AbstractRoom room)
-        {
-            if (!WallpaperRoomTracker.IsSafeWallpaperRoom(room) || room.shelter || IsShelterRoomName(room.name))
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool IsShelterRoomName(string roomName)
-        {
-            if (string.IsNullOrWhiteSpace(roomName))
-            {
-                return true;
-            }
-
-            string[] parts = roomName.Split('_');
-            if (parts.Length < 2)
-            {
-                return false;
-            }
-
-            string suffix = parts[parts.Length - 1];
-            if (!suffix.StartsWith("S", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            for (int i = 1; i < suffix.Length; i++)
-            {
-                if (!char.IsDigit(suffix[i]))
-                {
-                    return false;
-                }
-            }
-
-            return suffix.Length > 1;
-        }
-
-        /// <summary>
-        /// Remove all spawned creatures from the world
+        /// Remove everyone chaos added from the world
         /// </summary>
         private void CleanupAllCreatures()
         {
-            // Resolved once: the SlugNPCs HandleSlugNPC added to game.Players must not outlive their creatures
-            List<AbstractCreature> players = game?.session != null ? game.Players : null;
-
-            foreach (var creature in spawnedCreatures)
+            foreach (AbstractCreature creature in crowd)
             {
-                if (creature == null)
-                {
-                    continue;
-                }
-
                 try
                 {
-                    RemoveSpawnedCreature(creature, players);
+                    RemoveSpawnedCreature(creature);
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     WallpaperMod.Log?.LogWarning($"ChaosManager: Failed to remove {creature.creatureTemplate?.type}: {ex.Message}");
                 }
             }
 
-            spawnedCreatures.Clear();
+            crowd.Clear();
             WallpaperMod.Log?.LogInfo("ChaosManager: Cleaned up all spawned creatures");
         }
 
         /// <summary>
-        /// Fully remove one spawned creature. Destroying only the realized creature is not enough: the AbstractCreature
+        /// Fully remove one creature. Destroying only the realized creature is not enough: the AbstractCreature
         /// is only unregistered from its AbstractRoom if that room updates the destroyed object before it unloads (never
         /// for a creature in transit), a creature that is still abstract is never touched at all, and anything left
         /// registered is realized again when its room loads.
         /// </summary>
-        private void RemoveSpawnedCreature(AbstractCreature creature, List<AbstractCreature> players)
+        private void RemoveSpawnedCreature(AbstractCreature creature)
         {
             Creature realized = creature.realizedCreature;
             if (realized != null)
@@ -756,7 +442,7 @@ namespace RainWorldWallpaperMod
                     realized.LoseAllGrasps();
                     realized.AllGraspsLetGoOfThisObject(true);
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     WallpaperMod.Log?.LogWarning($"ChaosManager: Could not release grasps of {creature.creatureTemplate?.type}: {ex.Message}");
                 }
@@ -771,9 +457,6 @@ namespace RainWorldWallpaperMod
             // as well. This comes after RemoveFromRoom, otherwise AbstractRoom.RemoveEntity warns that the realized creature remains
             creature.Destroy();
             creature.Room?.RemoveEntity(creature);
-
-            // Only SlugNPCs were ever added here (HandleSlugNPC), Remove does nothing for any other creature
-            players?.Remove(creature);
         }
 
         /// <summary>
@@ -800,34 +483,18 @@ namespace RainWorldWallpaperMod
         public void Shutdown()
         {
             CleanupAllCreatures();
-            regionalCreatureTypes.Clear();
-            hasAnalyzedRegion = false;
-            spawnTimer = 0f;
-            regionLoadTimer = 0f;
+            rosterReady = false;
 
             WallpaperMod.Log?.LogInfo("ChaosManager: Shutdown complete");
         }
 
         /// <summary>
-        /// Called when region changes - force re-analysis on next update
+        /// Called when the region starts over without a world reload
         /// </summary>
         public void OnRegionChanged()
         {
             CleanupAllCreatures();
-            regionalCreatureTypes.Clear();
-            creatureWeightCounters.Clear(); // Reset weight counters for new region
-            hasAnalyzedRegion = false;
-            regionLoadTimer = 0f; // Reset load timer for new region
-            spawnTimer = 0f; // Reset spawn timer
-
-            WallpaperMod.Log?.LogInfo($"ChaosManager: Region changed, waiting {REGION_LOAD_DELAY}s before analyzing creatures");
+            rosterReady = false;
         }
-
-        // Public properties for UI
-        public bool IsEnabled => chaosEnabled;
-        public int ChaosLevel => chaosLevel;
-        public int SpawnedCreatureCount => spawnedCreatures.Count;
-        public int MaxCreatures => maxCreatures;
-        public float SpawnInterval => spawnInterval;
     }
 }
