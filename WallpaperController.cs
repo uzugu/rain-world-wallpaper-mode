@@ -10,7 +10,7 @@ namespace RainWorldWallpaperMod
     {
         public RegionManager RegionManager { get; }
         public RainWorldGame Game { get; }
-        public EchoMusicManager EchoMusic { get; private set; }
+        public EchoManager Echoes { get; private set; }
         public ChaosManager ChaosManager { get; private set; }
         public WallpaperHUD Hud => uiController.Hud;
         public WallpaperInputDevice ActiveInputDevice => inputState.ActiveDevice;
@@ -46,9 +46,9 @@ namespace RainWorldWallpaperMod
 
             currentRegionCode = startRegion;
             RegionManager = new RegionManager(this, startRegion);
-            EchoMusic = new EchoMusicManager(game);
+            Echoes = new EchoManager(game);
             ChaosManager = new ChaosManager(game, this);
-            transitionController = new WallpaperTransitionController(game, roomTracker, RegionManager, EchoMusic);
+            transitionController = new WallpaperTransitionController(game, roomTracker, RegionManager, Echoes);
 
             // Load settings from config
             if (WallpaperMod.Options != null)
@@ -110,7 +110,7 @@ namespace RainWorldWallpaperMod
                 watcherWorldState.ApplyToCurrentRoom(Game, currentRotState);
             }
 
-            EchoMusic?.Update();
+            Echoes?.Update();
             SyncChaosRuntimeState();
             ChaosManager?.Update(dt);
             uiController.Hud?.Update(dt);
@@ -134,6 +134,7 @@ namespace RainWorldWallpaperMod
             }
 
             uiController.EnsureHudInitialized(camera, this);
+            Echoes?.OnCameraUpdate(camera);
         }
 
         public void Shutdown()
@@ -142,7 +143,7 @@ namespace RainWorldWallpaperMod
             RunShutdownStep("Watcher state", () => watcherWorldState.ClearSessionState(Game));
             RunShutdownStep("UI", uiController.Shutdown);
             RunShutdownStep("region manager", () => RegionManager?.Cleanup());
-            RunShutdownStep("echo music", () => EchoMusic?.Shutdown());
+            RunShutdownStep("echoes", () => Echoes?.Shutdown());
             RunShutdownStep("chaos", () => ChaosManager?.Shutdown());
             inputState.Reset();
             rainCycleController.Clear();

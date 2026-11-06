@@ -59,6 +59,7 @@ namespace RainWorldWallpaperMod
             On.Room.Loaded += Room_Loaded;
             On.Player.Update += Player_Update;
             On.Overseer.Update += Overseer_Update;
+            On.World.SpawnGhost += World_SpawnGhost;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState += PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression += PlayerProgression_SaveProgression;
 
@@ -422,6 +423,23 @@ namespace RainWorldWallpaperMod
             orig(self, eu);
         }
 
+        private void World_SpawnGhost(On.World.orig_SpawnGhost orig, World self)
+        {
+            orig(self);
+
+            if (IsWallpaperSessionActive)
+            {
+                try
+                {
+                    EchoManager.WakeRegionEcho(self);
+                }
+                catch (Exception ex)
+                {
+                    Log?.LogError($"Could not wake the echo of {self?.name}: {ex}");
+                }
+            }
+        }
+
         private bool IsWallpaperSessionActive => constructingWallpaperGame || activeController != null;
 
         // Wallpaper sessions start with RegionSelect, so the game builds a blank save state and pre-saves it
@@ -530,6 +548,7 @@ namespace RainWorldWallpaperMod
             On.Room.Loaded -= Room_Loaded;
             On.Player.Update -= Player_Update;
             On.Overseer.Update -= Overseer_Update;
+            On.World.SpawnGhost -= World_SpawnGhost;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState -= PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression -= PlayerProgression_SaveProgression;
 

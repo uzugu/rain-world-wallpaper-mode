@@ -8,7 +8,7 @@ namespace RainWorldWallpaperMod
         private readonly RainWorldGame game;
         private readonly WallpaperRoomTracker roomTracker;
         private readonly RegionManager regionManager;
-        private readonly EchoMusicManager echoMusic;
+        private readonly EchoManager echoes;
 
         private float transitionDuration = 5f;
         private Vector2 startPosition;
@@ -18,12 +18,12 @@ namespace RainWorldWallpaperMod
             RainWorldGame game,
             WallpaperRoomTracker roomTracker,
             RegionManager regionManager,
-            EchoMusicManager echoMusic)
+            EchoManager echoes)
         {
             this.game = game ?? throw new ArgumentNullException(nameof(game));
             this.roomTracker = roomTracker ?? throw new ArgumentNullException(nameof(roomTracker));
             this.regionManager = regionManager;
-            this.echoMusic = echoMusic;
+            this.echoes = echoes;
         }
 
         public void SetTransitionDuration(float value)
@@ -41,7 +41,7 @@ namespace RainWorldWallpaperMod
 
             AbstractRoom selectedRoom = roomTracker.ShouldStayInCurrentRoom()
                 ? roomTracker.CurrentTargetRoom
-                : roomTracker.SelectRandomRoom(game.world.abstractRooms);
+                : echoes?.NextVisitRoom() ?? roomTracker.SelectRandomRoom(game.world.abstractRooms);
 
             if (selectedRoom == null)
             {
@@ -60,7 +60,8 @@ namespace RainWorldWallpaperMod
             bool isNewRoom = selectedRoom != roomTracker.CurrentTargetRoom;
             if (selectedRoom.realizedRoom?.cameraPositions != null && selectedRoom.realizedRoom.cameraPositions.Length > 0)
             {
-                int cameraIndex = roomTracker.SelectCameraPosition(selectedRoom.realizedRoom.cameraPositions.Length, isNewRoom);
+                int echoScreen = isNewRoom ? echoes?.FindEchoScreen(selectedRoom.realizedRoom) ?? -1 : -1;
+                int cameraIndex = roomTracker.SelectCameraPosition(selectedRoom.realizedRoom.cameraPositions.Length, isNewRoom, echoScreen);
                 targetPosition = selectedRoom.realizedRoom.cameraPositions[cameraIndex];
             }
             else
@@ -94,7 +95,8 @@ namespace RainWorldWallpaperMod
             bool isNewRoom = targetRoom != roomTracker.CurrentTargetRoom;
             if (targetRoom.realizedRoom?.cameraPositions != null && targetRoom.realizedRoom.cameraPositions.Length > 0)
             {
-                int cameraIndex = roomTracker.SelectCameraPosition(targetRoom.realizedRoom.cameraPositions.Length, isNewRoom);
+                int echoScreen = isNewRoom ? echoes?.FindEchoScreen(targetRoom.realizedRoom) ?? -1 : -1;
+                int cameraIndex = roomTracker.SelectCameraPosition(targetRoom.realizedRoom.cameraPositions.Length, isNewRoom, echoScreen);
                 targetPosition = targetRoom.realizedRoom.cameraPositions[cameraIndex];
             }
             else
@@ -183,7 +185,6 @@ namespace RainWorldWallpaperMod
                 regionManager?.OnRoomExplored();
             }
 
-            echoMusic?.OnRoomChanged(roomTracker.CurrentTargetRoom);
             return isNewRoom;
         }
 

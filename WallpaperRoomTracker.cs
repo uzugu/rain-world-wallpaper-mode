@@ -167,7 +167,10 @@ namespace RainWorldWallpaperMod
                 !UnsafeStoryRooms.Contains(roomName);
         }
 
-        public int SelectCameraPosition(int availablePositions, bool isNewRoom)
+        /// <summary>
+        /// Picks the screen to show by the camera mode. A <paramref name="preferredPosition"/> of 0 or more is shown instead.
+        /// </summary>
+        public int SelectCameraPosition(int availablePositions, bool isNewRoom, int preferredPosition = -1)
         {
             if (availablePositions <= 0)
             {
@@ -219,6 +222,12 @@ namespace RainWorldWallpaperMod
                 default:
                     currentCameraPositionIndex = random.Next(availablePositions);
                     break;
+            }
+
+            if (preferredPosition >= 0 && preferredPosition < availablePositions)
+            {
+                currentCameraPositionIndex = preferredPosition;
+                unvisitedPositions.Remove(preferredPosition);
             }
 
             return currentCameraPositionIndex;
