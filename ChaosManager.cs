@@ -30,8 +30,9 @@ namespace RainWorldWallpaperMod
         // With the "every creature" setting on, the share of new creatures that come from anywhere in the game.
         private const float EveryCreatureShare = 0.5f;
 
-        // Overseers need a player (OverseerCommunicationModule), and a Slugcat is one.
-        private static readonly HashSet<string> NeverSpawned = new HashSet<string> { "Slugcat", "Overseer" };
+        // Overseers need a player (OverseerCommunicationModule), and a Slugcat is one. No region has GrappleSnakes and the
+        // game cannot draw one: GrappleSnakeGraphics leaves a sprite slot empty, which throws when a camera sees it.
+        private static readonly HashSet<string> NeverSpawned = new HashSet<string> { "Slugcat", "Overseer", "GrappleSnake" };
 
         // These only work in the place the game puts them, so the "every creature" setting leaves them out. In their own
         // dens, where the region's list has them, they are fine.

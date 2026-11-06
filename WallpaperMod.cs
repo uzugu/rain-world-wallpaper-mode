@@ -63,6 +63,7 @@ namespace RainWorldWallpaperMod
             On.World.SpawnGhost += World_SpawnGhost;
             On.ShortcutHandler.SuckInCreature += ShortcutHandler_SuckInCreature;
             On.World.ActivateRoom_AbstractRoom += World_ActivateRoom;
+            On.RoomCamera.NewObjectInRoom_IDrawable += RoomCamera_NewObjectInRoom;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState += PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression += PlayerProgression_SaveProgression;
 
@@ -357,6 +358,21 @@ namespace RainWorldWallpaperMod
             }
         }
 
+        // A creature the game cannot draw throws in the middle of a room change, and RoomCamera.ApplyPositionChange only
+        // clears its pending change at the end, so the camera would retry and throw on every update and the wallpaper would
+        // stop for good. That creature goes undrawn instead. "Spawn every creature" takes in other mods' creatures as well.
+        private void RoomCamera_NewObjectInRoom(On.RoomCamera.orig_NewObjectInRoom_IDrawable orig, RoomCamera self, IDrawable obj)
+        {
+            try
+            {
+                orig(self, obj);
+            }
+            catch (Exception ex) when (IsWallpaperSessionActive)
+            {
+                Log?.LogError($"Could not draw {obj?.GetType().Name}: {ex}");
+            }
+        }
+
         private void Room_Loaded(On.Room.orig_Loaded orig, Room self)
         {
             // The game calls Loaded at the end of LoadFromDataString, inside the RoomPreparer constructor, so an
@@ -579,6 +595,7 @@ namespace RainWorldWallpaperMod
             On.World.SpawnGhost -= World_SpawnGhost;
             On.ShortcutHandler.SuckInCreature -= ShortcutHandler_SuckInCreature;
             On.World.ActivateRoom_AbstractRoom -= World_ActivateRoom;
+            On.RoomCamera.NewObjectInRoom_IDrawable -= RoomCamera_NewObjectInRoom;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState -= PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression -= PlayerProgression_SaveProgression;
 
