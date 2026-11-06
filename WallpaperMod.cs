@@ -21,6 +21,7 @@ namespace RainWorldWallpaperMod
         private bool autoLaunchWallpaperConsumed;
         private WallpaperController activeController;
         private bool constructingWallpaperGame;
+        private bool keepNextRoomUnloaded;
         private SlugcatStats.Name slugcatBeforeWallpaper;
         private bool hasSlugcatBeforeWallpaper;
         private string requestedStartRegion = "SU";
@@ -60,6 +61,8 @@ namespace RainWorldWallpaperMod
             On.Player.Update += Player_Update;
             On.Overseer.Update += Overseer_Update;
             On.World.SpawnGhost += World_SpawnGhost;
+            On.ShortcutHandler.SuckInCreature += ShortcutHandler_SuckInCreature;
+            On.World.ActivateRoom_AbstractRoom += World_ActivateRoom;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState += PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression += PlayerProgression_SaveProgression;
 
@@ -440,6 +443,31 @@ namespace RainWorldWallpaperMod
             }
         }
 
+        // A slugpup is a Player, and a Player going through a room exit loads the room behind it. In a wallpaper session
+        // nothing unloads that room (RoomRealizer follows the camera's creature, and there is none), and the pups there load
+        // the rooms behind them, until most of the region runs at full cost with no one watching. Without the load the pup
+        // carries on in the abstract world, the way any other creature leaves a room.
+        private void ShortcutHandler_SuckInCreature(On.ShortcutHandler.orig_SuckInCreature orig, ShortcutHandler self, Creature creature, Room room, ShortcutData shortCut)
+        {
+            keepNextRoomUnloaded = IsWallpaperSessionActive;
+            try
+            {
+                orig(self, creature, room, shortCut);
+            }
+            finally
+            {
+                keepNextRoomUnloaded = false;
+            }
+        }
+
+        private void World_ActivateRoom(On.World.orig_ActivateRoom_AbstractRoom orig, World self, AbstractRoom abstractRoom)
+        {
+            if (!keepNextRoomUnloaded)
+            {
+                orig(self, abstractRoom);
+            }
+        }
+
         private bool IsWallpaperSessionActive => constructingWallpaperGame || activeController != null;
 
         // Wallpaper sessions start with RegionSelect, so the game builds a blank save state and pre-saves it
@@ -549,6 +577,8 @@ namespace RainWorldWallpaperMod
             On.Player.Update -= Player_Update;
             On.Overseer.Update -= Overseer_Update;
             On.World.SpawnGhost -= World_SpawnGhost;
+            On.ShortcutHandler.SuckInCreature -= ShortcutHandler_SuckInCreature;
+            On.World.ActivateRoom_AbstractRoom -= World_ActivateRoom;
             On.PlayerProgression.SaveDeathPersistentDataOfCurrentState -= PlayerProgression_SaveDeathPersistentDataOfCurrentState;
             On.PlayerProgression.SaveProgression -= PlayerProgression_SaveProgression;
 
