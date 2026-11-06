@@ -233,6 +233,66 @@ namespace RainWorldWallpaperMod
     }
 
     /// <summary>
+    /// A small padlock. It is drawn from single pixels because the game's own lock sprite (Jolly_Lock_1) is in the Jolly
+    /// Co-op atlas, which only loads with that mod. Like a HUD line it has a black copy one pixel down and to the right.
+    /// </summary>
+    internal sealed class WallpaperHudLockIcon
+    {
+        public const float Width = 11f;
+
+        private const float Height = 14f;
+
+        // The body, then the shackle's two sides and top, measured from the icon's bottom left corner.
+        private static readonly Rect[] Parts =
+        {
+            new Rect(0f, 0f, Width, 8f),
+            new Rect(2f, 8f, 2f, 4f),
+            new Rect(7f, 8f, 2f, 4f),
+            new Rect(2f, 12f, 7f, 2f)
+        };
+
+        private readonly FSprite[] shades;
+        private readonly FSprite[] bars;
+
+        public WallpaperHudLockIcon(FContainer parent, Color color)
+        {
+            shades = AddParts(parent, Color.black);
+            bars = AddParts(parent, color);
+        }
+
+        private static FSprite[] AddParts(FContainer parent, Color color)
+        {
+            var sprites = new FSprite[Parts.Length];
+            for (int i = 0; i < Parts.Length; i++)
+            {
+                // "pixel" is one pixel square, so its scale is its size in pixels.
+                sprites[i] = new FSprite("pixel")
+                {
+                    anchorX = 0f,
+                    anchorY = 0f,
+                    color = color,
+                    scaleX = Parts[i].width,
+                    scaleY = Parts[i].height
+                };
+                parent.AddChild(sprites[i]);
+            }
+
+            return sprites;
+        }
+
+        public void SetPosition(float left, float centerY)
+        {
+            float x = Mathf.Round(left);
+            float y = Mathf.Round(centerY - Height * 0.5f);
+            for (int i = 0; i < Parts.Length; i++)
+            {
+                bars[i].SetPosition(x + Parts[i].x, y + Parts[i].y);
+                shades[i].SetPosition(x + Parts[i].x + 1f, y + Parts[i].y - 1f);
+            }
+        }
+    }
+
+    /// <summary>
     /// The words of the HUD, and the lookups behind them. Nothing here touches a sprite.
     /// </summary>
     internal static class WallpaperHudText
@@ -243,6 +303,8 @@ namespace RainWorldWallpaperMod
 
         // A hosted desktop wallpaper gets mouse clicks but no keys (WallpaperHostMode).
         public const string HostedWallpaperHint = "Double-click Settings";
+
+        public const string RoomLocked = "Room locked";
 
         // The cycle percentage at which No Rain Wait changes region. Mirrors WallpaperRainCycleController.NoRainThreshold.
         private const int NoRainThresholdPercent = 95;

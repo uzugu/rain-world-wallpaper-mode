@@ -5,13 +5,15 @@ namespace RainWorldWallpaperMod
 {
     /// <summary>
     /// Heads-up display for Wallpaper Mode, drawn with the game's own fonts, colours and fades so that it reads like
-    /// part of Rain World's HUD. It has three blocks, each of which fades on its own:
+    /// part of Rain World's HUD. It has four blocks, each of which fades on its own:
     ///   location (bottom left)    region and sub-region name, the room and the one the camera is heading for, next region
     ///   rain (bottom right)       rain countdown or cycle progress, region count, a thin cycle progress line
     ///   controls (bottom centre)  key or controller hints
-    /// Input, or the always-show setting, brings up all three blocks and they fade out again after the configured
+    ///   room lock (top right)     a padlock and "Room locked", for as long as the room is locked
+    /// Input, or the always-show setting, brings up the first three blocks and they fade out again after the configured
     /// delay. The location block also announces itself for a few seconds whenever a region or sub-region begins, even
-    /// while the rest of the HUD is hidden.
+    /// while the rest of the HUD is hidden. The room lock block goes by the lock alone: a locked room stops the tour, and
+    /// a wallpaper that seems stuck should say why.
     /// </summary>
     public class WallpaperHUD
     {
@@ -22,6 +24,7 @@ namespace RainWorldWallpaperMod
         private const float ProgressBarHeight = 2f;
         private const float ProgressBarGap = 6f;
         private const float MinProgressBarWidth = 150f;
+        private const float LockIconGap = 6f;
 
         // Timing, in game ticks (40 per second)
         private const int TitleHoldTicks = 160;
@@ -32,6 +35,7 @@ namespace RainWorldWallpaperMod
         private const float LocationShadowAlpha = 0.32f;
         private const float RainShadowAlpha = 0.3f;
         private const float ControlsShadowAlpha = 0.22f;
+        private const float LockShadowAlpha = 0.22f;
 
         private readonly RoomCamera camera;
         private readonly WallpaperController controller;
@@ -42,6 +46,7 @@ namespace RainWorldWallpaperMod
         private WallpaperHudBlock locationBlock;
         private WallpaperHudBlock rainBlock;
         private WallpaperHudBlock controlsBlock;
+        private WallpaperHudBlock lockBlock;
         private WallpaperHudLine regionLine;
         private WallpaperHudLine subregionLine;
         private WallpaperHudLine roomLine;
@@ -49,6 +54,8 @@ namespace RainWorldWallpaperMod
         private WallpaperHudLine rainLine;
         private WallpaperHudLine regionCountLine;
         private WallpaperHudLine controlsLine;
+        private WallpaperHudLine lockLine;
+        private WallpaperHudLockIcon lockIcon;
         private FSprite barTrack;
         private FSprite barFill;
 
@@ -151,6 +158,12 @@ namespace RainWorldWallpaperMod
                 roomLine = locationBlock.AddLine(font, darkGrey, FLabelAlignment.Left, 0f);
                 nextRegionLine = locationBlock.AddLine(font, darkGrey, FLabelAlignment.Left, 0f);
 
+                // Room lock, top right. The words never change, so they are set once and the block just fades.
+                lockBlock = new WallpaperHudBlock(root, flatLight, LockShadowAlpha);
+                lockLine = lockBlock.AddLine(font, mediumGrey, FLabelAlignment.Right, 0f);
+                lockLine.SetText(WallpaperHudText.RoomLocked);
+                lockIcon = new WallpaperHudLockIcon(lockBlock.Container, mediumGrey);
+
                 GetParentContainer().AddChild(root);
                 layoutScreenSize = GetScreenSize();
 
@@ -248,6 +261,7 @@ namespace RainWorldWallpaperMod
                 locationBlock.Step(fullHud || (!settingsMenuOpen && titleHoldTicks > 0));
                 rainBlock.Step(fullHud);
                 controlsBlock.Step(fullHud);
+                lockBlock.Step(controller.IsRoomLocked && !settingsMenuOpen);
 
                 ApplyLayout();
                 UpdateProgressBar(cycleProgress);
@@ -509,6 +523,7 @@ namespace RainWorldWallpaperMod
                 locationBlock.LayoutDirty = true;
                 rainBlock.LayoutDirty = true;
                 controlsBlock.LayoutDirty = true;
+                lockBlock.LayoutDirty = true;
             }
 
             Vector2 safe = GetSafeOffset();
@@ -537,6 +552,13 @@ namespace RainWorldWallpaperMod
                 // of the hint is kept under the margin.
                 float hintBottom = Mathf.Clamp(Margin - HintClearance - controlsLine.Height, 0f, ControlsBottom);
                 controlsBlock.Layout(screen.x * 0.5f, FLabelAlignment.Center, hintBottom + safe.y, 0f, 0f);
+            }
+
+            if (lockBlock.LayoutDirty)
+            {
+                float lockBottom = screen.y - Margin - safe.y - lockLine.Height;
+                Rect area = lockBlock.Layout(screen.x - Margin - safe.x, FLabelAlignment.Right, lockBottom, 0f, 0f);
+                lockIcon.SetPosition(area.x - LockIconGap - WallpaperHudLockIcon.Width, area.center.y);
             }
         }
 
@@ -595,6 +617,7 @@ namespace RainWorldWallpaperMod
             locationBlock?.HideNow();
             rainBlock?.HideNow();
             controlsBlock?.HideNow();
+            lockBlock?.HideNow();
         }
 
         public void Destroy()
@@ -617,6 +640,7 @@ namespace RainWorldWallpaperMod
                 locationBlock?.Remove();
                 rainBlock?.Remove();
                 controlsBlock?.Remove();
+                lockBlock?.Remove();
                 root?.RemoveAllChildren();
                 root?.RemoveFromContainer();
             }
@@ -628,6 +652,7 @@ namespace RainWorldWallpaperMod
             locationBlock = null;
             rainBlock = null;
             controlsBlock = null;
+            lockBlock = null;
             root = null;
         }
     }
