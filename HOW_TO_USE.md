@@ -16,7 +16,7 @@ There is no in-game `F9` toggle workflow in the current implementation.
 - Player-controlled slugcats are suppressed so the game can run hands-free.
 - The mod automatically tours rooms in the current region.
 - Region changes are driven by the rain cycle instead of a fixed dwell timer.
-- Echo music and optional chaos spawning continue to run while the wallpaper is active.
+- Echoes and the optional chaos crowd keep running while the wallpaper is active.
 
 ## Region Changes
 
@@ -39,7 +39,7 @@ Wallpaper mode uses the active region's rain cycle:
 | `N` | Force an immediate random room change |
 | `G` | Force next region |
 | `B` | Force previous region |
-| `L` | Toggle room lock |
+| `L` | Toggle room lock (a padlock shows at the top right while it is on) |
 | `H` | Toggle HUD always visible |
 | `F1` / `Tab` | Open or close the settings menu |
 | `Escape` | Close the settings menu if it is open, otherwise return to the main menu |
@@ -107,21 +107,41 @@ Some Watcher rooms have rot, flowers, or special objects authored directly into 
 
 ## Chaos Mode
 
-Chaos mode can populate rooms with creatures for a more active wallpaper:
+Chaos mode fills the region with many more of its own creatures, so the camera runs into far more of them. They start in the dens the game gives them and go about their business; nothing steers them towards the camera. Whoever dies is replaced.
 
-- level `1` through `10` controls spawn interval and creature cap
-- slugpups and scavengers are intentionally common
-- `Spawn All` (Spawn every creature in the settings menu) bypasses the normal creature blacklist and is explicitly experimental
+The level sets how many extra creatures the region holds. Each level doubles the one below it:
+
+| Level | Extra creatures in the region |
+| --- | --- |
+| 1 | 9 |
+| 2 | 19 |
+| 3 | 38 |
+| 4 | 75 |
+| 5 | 150 |
+| 6 | 300 |
+| 7 | 600 |
+| 8 | 1200 |
+| 9 | 2400 |
+| 10 | 4800 |
+
+- which creatures come is up to the game: each region and campaign has its own list, shown in `CHAOS_CREATURES.md`
+- batflies, leeches and coalescipedes stay as they are, because the game only keeps a count of those
+- slugpups come where the game allows them: in the Survivor, Hunter and Gourmand campaigns, in regions that have a chance of one
+- from level 9 the most crowded rooms can slow the game down: in the Outskirts level 8 held full speed, level 9 fell to about two thirds of it with 130 creatures in a room, and level 10 to about a third with 260. Level 10 also used about 5 GB of memory
+- the same level is more crowded in a region with fewer dens, such as Five Pebbles
+- `Spawn All` (Spawn every creature in the settings menu) makes half of the extra creatures come from anywhere in the game, and is explicitly experimental
 
 Chaos changes are safest to evaluate after a region reload.
 
 ## Echoes
 
-Echoes can appear naturally in eligible rooms. When this happens:
+Every region that has an echo in the selected campaign shows it, whatever your save has seen, and the Watcher campaign shows its Spinning Tops. Near one:
 
-- the mod detects the echo room
-- echo music fades based on room proximity
-- audio high-pass filters applied by the echo are disabled to avoid distorted playback
+- the picture takes on the echo's shading, more strongly the closer the camera is, and gold flakes fall
+- time slows a little, sounds turn muffled and the echo's own song plays
+- creatures sleep
+
+Once per region the tour walks in to the echo through the rooms around it and ends on the screen that shows it.
 
 ## Troubleshooting
 

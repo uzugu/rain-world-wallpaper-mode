@@ -12,8 +12,8 @@ Rain World Wallpaper Mode turns Rain World into a hands-free animated wallpaper.
 - Four camera modes for multi-camera rooms
 - In-game settings menu and quick travel
 - Auto-hiding or always-visible HUD
-- Optional chaos spawning with configurable intensity
-- Natural echo support with echo music handling
+- Optional chaos mode: up to thousands more of each region's own creatures, doubling with every level
+- Echoes with their song, shading and gold flakes, and a visit to the echo once per region
 - Campaign-aware region lists, including CRS custom regions marked Story/Optional by their authors
 - Watcher campaign regions and Watcher world-state modes, including Rot + Karma
 - Remix configuration for persistent defaults
@@ -59,7 +59,7 @@ For setup details, see `WALLPAPER_ENGINE.md`.
 | `N` | Immediate random room change |
 | `G` | Next region |
 | `B` | Previous region |
-| `L` | Toggle room lock |
+| `L` | Toggle room lock (a padlock shows at the top right while it is on) |
 | `H` | Toggle HUD always visible |
 | `F1` / `Tab` | Open or close the settings menu |
 | `Escape` | Close the settings menu if it is open, otherwise return to the main menu |

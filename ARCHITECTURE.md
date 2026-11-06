@@ -53,7 +53,7 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - owns the active room/region state
   - enforces spectator mode
   - drives transitions and input
-  - coordinates HUD, settings menu, echo music, and chaos mode
+  - coordinates HUD, settings menu, echoes, and chaos mode
 
 - `RegionManager.cs`
   - maintains region order
@@ -72,6 +72,7 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
   - uses the game's fonts, menu colours and FlatLight shadows: location at the bottom left, rain state and region progress at the bottom right, controls hint at the bottom centre
   - announces a new region, and a new sub-region once the camera has settled in it, the way the game's `SubregionTracker` does
   - fades out after the idle delay unless it is set to always visible
+  - shows a padlock and "Room locked" at the top right for as long as the room is locked, whatever the rest of the HUD is doing
 
 - `WallpaperHudParts.cs`
   - the HUD's text lines, independently fading blocks and text helpers
@@ -105,17 +106,16 @@ The mod turns Rain World into a hands-free animated wallpaper by launching into 
 
 ### Audio and Atmosphere
 
-- `EchoMusicManager.cs`
-  - detects echo rooms
-  - starts and fades echo music by room proximity
-  - disables echo-applied audio filters that distort playback
+- `EchoManager.cs`
+  - wakes the region's echo on a blank save, through a post-hook on `World.SpawnGhost`
+  - drives Spinning Top shading from the middle of the screen, where the game uses the followed player
+  - runs the echo song with the camera in the player's place, using the presence's own song
+  - walks the tour in to the echo once per region and picks the screen that shows it
 
 - `ChaosManager.cs`
-  - optional creature spawning system
-  - scales spawn timing and caps by chaos level
-  - re-analyzes regions after reloads
-  - protects the wallpaper session from problematic creature types through a blacklist unless `Spawn All` is enabled
-  - lists at most four slugpups in `game.Players`, Rain World's own player limit: `ScavengersWorldAI` keeps per-player kill squads in arrays of four, and a fifth entry made it throw on every tick in regions with a scavenger outpost
+  - runs the region's own creature list more times; see "Chaos Multiplies The Region's Own List"
+  - levels are exponential: 150 extra creatures at level 5, doubling per level
+  - slugpups are not listed in `game.Players`, which stays empty in a wallpaper session: the `Players[0]` lookups a pup can reach are all behind `ModManager.CoopAvailable`, and anyone in that list can start an echo's ending or overrun `ScavengersWorldAI`'s arrays of four
 
 ### Packaging
 
@@ -141,6 +141,10 @@ The current runtime is built around these hooks:
 - `Room.Loaded`
 - `Player.Update`
 - `Overseer.Update`
+- `World.SpawnGhost`
+- `ShortcutHandler.SuckInCreature`
+- `World.ActivateRoom`
+- `RoomCamera.NewObjectInRoom`
 - `PlayerProgression.SaveDeathPersistentDataOfCurrentState`
 - `PlayerProgression.SaveProgression`
 - `MainMenu.ctor`
@@ -169,6 +173,22 @@ The mod continuously removes or suppresses player-controlled slugcats while allo
 ### Rooms The Wallpaper Uses
 
 `WallpaperRoomTracker.IsSafeWallpaperRoom` decides which rooms the camera tours, chaos spawns into and the settings menu offers for travel. It leaves out gates, the off-screen den, the oracle chambers (their room scripts start story events that expect a player) and every room in `World.DisabledMapRooms`. Rain World's world loader keeps another campaign's exclusive rooms (`EXCLUSIVEROOM`) and the rooms the current campaign hides (`HIDEROOM`) in the world as unreachable rooms whose exits lead nowhere back, and only lists them there; the game itself uses that list to keep creature spawns and overseers out of them.
+
+### Chaos Multiplies The Region's Own List
+
+A region's world file has a `CREATURES` list per campaign, which the game reads into `World.spawners`. `WorldLoader.GeneratePopulation` runs through it once and puts each creature in the den its spawner names. Chaos does the same thing more times: it picks a random den place from the list (a place appears once per creature the list makes, so the mix stays the region's), creates the creature at that den with the spawner's data and calls `MoveEntityToDen`. The game lets it out when it is ready, through the den's pipe if the room is loaded. For a lineage, a den whose creature changes over the cycles, any creature of the chain can come out.
+
+This keeps every creature in a place the game put it, per campaign and in custom regions too, so there is no list of creature types in the mod. A blacklist or a table of guests would be a guess: the old ones kept out Monster Kelp and Pole Mimics, which live in 25 regions each, and brought in scavengers and slugpups where the game has none (19 and 31 of the 51 regions). `CHAOS_CREATURES.md` shows what the lists hold.
+
+Nothing steers the creatures. Only the room on screen is realized, so whether the camera meets one is chance, and the numbers do the work: levels are exponential, 150 extra creatures at level 5 and double per level, up to 4800 at level 10. `ChaosManager` keeps the region at that number, so whoever dies is replaced.
+
+- `ignoreCycle` is set and `preCycle` cleared on every chaos creature. Otherwise those from a `{Night}` or `{PreCycle}` line would wait in their dens for an hour that never comes, and the whole crowd would leave for the dens in the last minute of the cycle.
+- Swarm creatures (`quantified`: batflies, leeches, coalescipedes) are only a count per room until the room loads, so they stay as the game has them.
+- Slugpups are not on the lists. The game gives each region a chance per cycle (`regionParams.slugPupSpawnChance`) and only in the Survivor, Hunter and Gourmand campaigns (`StoryGameSession.slugPupMaxCount`). That chance is their share of the extra creatures, up to half. The game's other condition, a beaten Gourmand campaign, is left out, because a wallpaper should not depend on the save.
+- A slugpup is a `Player`, and `ShortcutHandler.SuckInCreature` loads the room behind any Player entering a room exit. Nothing would unload that room, so `WallpaperMod` stops that load and the pup carries on in the abstract world, the way other creatures leave a room.
+- The room a session starts in is unloaded on the first move, like any room the camera leaves. The tracker has no previous room yet, so `WallpaperTransitionController.CompleteTransition` takes it from the camera.
+- The `Every creature` setting makes half of the extra creatures come from every template in the game, placed in a random room that allows them and has nodes they can use. Creatures that only work in their own place stay out of that (`NeedsOwnDen`). `AddEntity` only registers a creature, so these go into rooms that are not loaded.
+- The game cannot draw everything it has a template for. `GrappleSnakeGraphics` leaves one sprite slot empty, so any GrappleSnake throws when a camera sees it, and the camera then retries that room change on every update, which stops the wallpaper for good. No region's list has one, so `NeverSpawned` leaves it out, and `WallpaperMod` catches what `RoomCamera.NewObjectInRoom` throws, so any other creature the game cannot draw goes undrawn instead.
 
 ### Rain-Driven Region Traversal
 
